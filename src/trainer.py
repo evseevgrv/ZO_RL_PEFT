@@ -346,7 +346,7 @@ class OurTrainer(Trainer):
         elif args.trainer == "zo_sgd":
             self.optimizer = ZO_SGD(self.model.parameters(), lr=1e-3, eps=1e-2, momentum=0.0, gradient_sparsity=self.gradient_sparsity)
         elif args.trainer == "zorl_sgd":
-            self.optimizer = ZORL_SGD(self.model.parameters(), lr=1e-3, eps=1e-2, momentum=0.0, gradient_sparsity=self.gradient_sparsity)
+            self.optimizer = ZORL_SGD(self.model.parameters(), tau=1e-1, lr=1e-3, eps=1e-2, momentum=0.0, gradient_sparsity=self.gradient_sparsity)
         elif args.trainer == "zo_signsgd":
             self.optimizer = ZO_SignSGD(self.model.parameters(), self.args, self.gradient_sparsity)
         elif args.trainer == "zo_conserv":
@@ -566,7 +566,7 @@ class OurTrainer(Trainer):
                 ):
                     # MeZO added: update model with the estimated gradient
                     # Added zo_jaguar
-                    if args.trainer in ["zo_sgd", "zo_adam", "zo_signsgd", "zo_conserv", "jaguar_signsgd", "zo_muon", "zo_sampling_muon", "jaguar muon"]: # FIXME: why jaguar muon wasn't here?
+                    if args.trainer in ["zo_sgd", "zo_adam", "zo_signsgd","zorl_sgd", "zo_conserv", "jaguar_signsgd", "zo_muon", "zo_sampling_muon", "jaguar muon"]: # FIXME: why jaguar muon wasn't here?
                         self.zo_update(model)
                     elif args.trainer == "forward_grad":
                         self.forward_grad_update(model)
