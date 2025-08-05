@@ -1,0 +1,14 @@
+artifact_uri: file:///home/rinya/zero-order-optimization/src/mlruns/0/96ba3afcacc24a2d877462b862f9ccb6/artifacts
+end_time: 1752243158759
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+run_id: 96ba3afcacc24a2d877462b862f9ccb6
+run_name: momenzo_muon-SST2-0-opt-1.3b-OPTIM_ft-STEP20000-adamw-LR0.5-constant-ZOEPS0.001-Q1
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1752243116515
+status: 3
+tags: []
+user_id: rinya
