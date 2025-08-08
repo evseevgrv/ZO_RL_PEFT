@@ -11,14 +11,21 @@ from functions import (
 if __name__ == "__main__":
     d = 2
     for gamma in [1e-2]:
-        for eps in [1e-1]:
+        for eps in [1e-2]:
             print(f"RUN FOR gamma={gamma}, eps={eps}")
             eps_scheduler = EpsilonScheduler(
                 initial_eps=eps,
                 schedule_type='cosine',
                 schedule_params={
                     'total_steps': 20000,
-                    'min_eps': 1e-6
+                    'min_eps': 1e-6,
+                    'decay_rate': 0.001,
+                    'min_eps': 1e-6,
+                    'milestones': [5000, 10000, 15000],
+                    'decay_factor': 0.5,
+                    'power': 2.0,
+                    'total_steps': 20000,
+                    'cycle_length': 2000
                 }
             )
 
