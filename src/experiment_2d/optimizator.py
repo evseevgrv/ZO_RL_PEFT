@@ -61,7 +61,7 @@ class Experiment2d:
         ])
         
         total_sum = np.sum(f_vals)
-        term_i = (self.K * f_vals - total_sum) / (self.K)
+        term_i = (self.K * f_vals - total_sum) / (self.K - 1)
         
         g_x = np.sum(
             term_i[:, np.newaxis] * e_samples, 
