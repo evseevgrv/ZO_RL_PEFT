@@ -7,17 +7,30 @@ from matplotlib.lines import Line2D
 
 
 class Experiment2d:
-    def __init__(self, f, eps=0.1, tau=0.1, K=50, gamma=0.01,
-                 x0=None, mu0=None, d=2,
-                 plot_mu_vectors=True,
-                 plot_e_vectors=True,
-                 plot_gx_vectors=False,
-                 plot_contour=False):
+    def __init__(
+            self, f, eps=0.1, tau=0.1, K=50, gamma=0.01,
+            x0=None, mu0=None, d=2,
+            plot_mu_vectors=True,
+            plot_e_vectors=True,
+            plot_gx_vectors=False,
+            plot_contour=False,
+            eps_scheduler=None
+        ):  
         if K <= 1:
             raise ValueError("K must be greater than 1")
         
         self.d = d
+        self.eps0 = eps
         self.eps = eps
+
+        if eps_scheduler is None:
+            self.eps_scheduler = EpsilonScheduler(
+                initial_eps=eps,
+                schedule_type='constant'
+            )
+        else:
+            self.eps_scheduler = eps_scheduler
+
         self.tau = tau
         self.K = K
         self.gamma = gamma
@@ -33,6 +46,9 @@ class Experiment2d:
         self.plot_contour = plot_contour
 
     def step(self):
+        self.eps_scheduler.step()
+        self.eps = self.eps_scheduler.get_eps()
+
         e_samples = np.random.normal(
             loc=self.mu, 
             scale=self.eps, 
@@ -73,20 +89,25 @@ class Experiment2d:
         return metrics
 
     def run(self, num_steps, project_name="optimization_experiment", config=None):
+        scheduler_config = {
+            'schedule_type': self.eps_scheduler.schedule_type,
+            'schedule_params': self.eps_scheduler.schedule_params
+        }
         run_config = {
-            "eps": self.eps,
+            "eps": self.eps_scheduler.initial_eps,
             "tau": self.tau,
             "K": self.K,
             "gamma": self.gamma,
             "d": self.d,
-            "num_steps": num_steps
+            "num_steps": num_steps,
+            "eps_scheduler": scheduler_config
         }
         if config:
             run_config.update(config)
         
         wandb.init(
             project=project_name,
-            name=config["function"] + f"-gamma={self.gamma}-eps={self.eps}",
+            name=config["function"] + f"-gamma={self.gamma}-eps={self.eps}-eps_scheduler={self.eps_scheduler.get_schedule_type()}",
             config=run_config,
             notes="d=2 experiment"
         )
@@ -155,7 +176,7 @@ class Experiment2d:
         plt.ylabel("$x_2$", fontsize=12)
         plt.axis('equal')
         plt.tight_layout()
-        plt.savefig(f"experiment_2d/plots/x_plots/trajectory_x-function={config['function']}-gamma={self.gamma}-eps={self.eps}.pdf", 
+        plt.savefig(f"experiment_2d/plots/x_plots/trajectory_x-function={config['function']}-gamma={self.gamma}-eps={self.eps}-eps_scheduler={self.eps_scheduler.get_schedule_type()}.pdf", 
                     bbox_inches='tight', dpi=300)
         plt.close()
 
@@ -170,7 +191,7 @@ class Experiment2d:
         plt.ylabel("$\\mu_2$", fontsize=12)
         plt.axis('equal')
         plt.tight_layout()
-        plt.savefig(f"experiment_2d/plots/mu_plots/trajectory_mu-function={config['function']}-gamma={self.gamma}-eps={self.eps}.pdf", 
+        plt.savefig(f"experiment_2d/plots/mu_plots/trajectory_mu-function={config['function']}-gamma={self.gamma}-eps={self.eps}-eps_scheduler={self.eps_scheduler.get_schedule_type()}.pdf", 
                     bbox_inches='tight', dpi=300)
         plt.close()
 
@@ -208,7 +229,7 @@ class Experiment2d:
 
         scale_factor_mu = 0.01
         scale_factor_e = 1.0
-        scale_factor_gx = 0.005
+        scale_factor_gx = 0.01
         arrow_width_mu = 0.0002
         head_width_mu = 0.005
         head_length_mu = 0.01
@@ -299,7 +320,7 @@ class Experiment2d:
         plt.ylim(y_min, y_max)
         plt.tight_layout()
         plt.savefig(
-            f"experiment_2d/plots/x_mu_vectors/trajectory_x_mu-function={config['function']}-gamma={self.gamma}-eps={self.eps}.pdf",
+            f"experiment_2d/plots/x_mu_vectors/trajectory_x_mu-function={config['function']}-gamma={self.gamma}-eps={self.eps0}-eps_scheduler={self.eps_scheduler.get_schedule_type()}.pdf",
             bbox_inches='tight',
             dpi=300
         )
