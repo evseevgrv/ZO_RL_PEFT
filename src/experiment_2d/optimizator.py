@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import os
 from matplotlib.lines import Line2D
+from eps_scheduler import * 
 
 
 class Experiment2d:
@@ -60,7 +61,7 @@ class Experiment2d:
         ])
         
         total_sum = np.sum(f_vals)
-        term_i = (self.K * f_vals - total_sum) / (self.K - 1)
+        term_i = (self.K * f_vals - total_sum) / (self.K)
         
         g_x = np.sum(
             term_i[:, np.newaxis] * e_samples, 
