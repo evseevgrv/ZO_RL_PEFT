@@ -75,3 +75,6 @@ class EpsilonScheduler:
     def reset(self):
         self.step_count = 0
         self.current_eps = self.initial_eps
+
+    def get_schedule_type(self):
+        return self.schedule_type
