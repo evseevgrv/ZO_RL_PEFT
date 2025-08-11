@@ -209,3 +209,4 @@ __marimo__/
 src/**/wandb/
 src/**/result/
 src/**/mlruns/
+src/**/plots 
