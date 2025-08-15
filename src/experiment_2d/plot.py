@@ -61,8 +61,8 @@ class CombinedPlotter:
         self.step_interval = step_interval
         
         self.optimizer_colors = {
-            'SGD': 'green',
-            'ZOSGD': 'purple',
+            'SGD': 'darkgreen',
+            'ZOSGD': 'darkpurple',
             'ZORL': 'black'
         }
         self.default_color = 'gray'
@@ -282,7 +282,7 @@ class CombinedPlotter:
 
     def plot(self, output_path, title=None):
         sns.set_style("whitegrid")
-        plt.figure(figsize=(10, 8))
+        plt.figure(figsize=(8, 6))
         ax = plt.gca()
         
         all_x = []
@@ -358,7 +358,7 @@ class CombinedPlotter:
             )
             legend_elements.append(
                 Line2D([0], [0], marker='*', color='w', markerfacecolor='gold',
-                       markersize=12, markeredgecolor='black', label='(0,0)')
+                       markersize=12, markeredgecolor='black', label='Theoretical solution')
             )
         
         if self.plot_mu_vectors:

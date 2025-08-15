@@ -126,7 +126,7 @@ class Experiment2d:
                     print(f"Step {step}: f(x) = {metrics['f_value']:.6f}, x = [{x_str}]")
 
         trajectory_x = np.array(trajectory_x)
-        trajectory_gx = np.array(trajectory_gx)
+        # trajectory_gx = np.array(trajectory_gx)
         if trajectory_mu:
             trajectory_mu = np.array(trajectory_mu)
 
@@ -177,8 +177,8 @@ class Experiment2d:
 
         plt.figure(figsize=(8, 6))
         
-        x_min, x_max = min(0, min(trajectory_x[:, 0])) - 0.15, max(0, max(trajectory_x[:, 0])) + 0.15
-        y_min, y_max = min(0, min(trajectory_x[:, 1])) - 0.15, max(0, max(trajectory_x[:, 1])) + 0.15
+        x_min, x_max = min(1, min(trajectory_x[:, 0])) - 0.15, max(1, max(trajectory_x[:, 0])) + 0.15
+        y_min, y_max = min(1, min(trajectory_x[:, 1])) - 0.15, max(1, max(trajectory_x[:, 1])) + 0.15
         
         if self.plot_contour:
             X, Y = np.meshgrid(np.linspace(x_min, x_max, 100), np.linspace(y_min, y_max, 100))
@@ -198,11 +198,11 @@ class Experiment2d:
         plt.plot(trajectory_x[-1, 0], trajectory_x[-1, 1], 
                  marker='*', color='red', markersize=10, 
                  markeredgecolor='black', markeredgewidth=0.5, zorder=4)
-        plt.plot(0, 0,  
+        plt.plot(1, 1,  
                  marker='*', color='gold', markersize=10, 
                  markeredgecolor='black', markeredgewidth=0.5, zorder=4)
 
-        scale_factor_mu = 0.01
+        scale_factor_mu = 0.05
         scale_factor_e = 1.0
         scale_factor_gx = 0.01
         arrow_width_mu = 0.0002
@@ -277,7 +277,7 @@ class Experiment2d:
             Line2D([0], [0], marker='*', color='w', markerfacecolor='red', 
                    markersize=10, markeredgecolor='black', label='Final point'),
             Line2D([0], [0], marker='*', color='w', markerfacecolor='gold', 
-                   markersize=10, markeredgecolor='black', label='(0,0)')
+                   markersize=10, markeredgecolor='black', label='Theoretical solution')
         ]
         
         if self.plot_mu_vectors and hasattr(self.optimizer, 'has_mu') and self.optimizer.has_mu:
