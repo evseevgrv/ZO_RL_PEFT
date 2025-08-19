@@ -170,6 +170,10 @@ class OurArguments(TrainingArguments):
     min_lr_ratio: float = 0.1
     scheduler_cycle_length: int = 1
 
+    k_value: int = 10 
+    variance: float = 1e-3
+    lr_mu: float = None 
+
 
 def parse_args():
     parser = argparse.ArgumentParser()

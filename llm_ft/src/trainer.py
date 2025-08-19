@@ -357,6 +357,11 @@ class OurTrainer(Trainer):
             self.optimizer = ZO_SamplingMUON(self.model.parameters(), lr=args.learning_rate, eps=args.zo_eps, momentum=args.momentum, perturbation_mode=args.perturbation_mode, vector_sampling_type=args.vector_sampling_type, matrix_sampling_type=args.matrix_sampling_type, gradient_sparsity=self.gradient_sparsity)
         elif args.trainer == "jaguar_muon":
             self.optimizer = Jaguar_MUON(self.model.parameters(), lr=args.learning_rate, eps=args.zo_eps, momentum=args.momentum, beta=args.zo_beta, perturbation_mode=args.perturbation_mode, use_smoothing=args.zo_use_smoothing, gradient_sparsity=self.gradient_sparsity)
+        elif args.trainer == "zo_rl":
+            self.optimizer = ZO_RL(self.model.parameters(), lr=args.learning_rate, eps=args.zo_eps, momentum=args.momentum, 
+                                perturbation_mode=args.perturbation_mode, 
+                                k=args.k_value, variance=args.variance, lr_mu=args.lr_mu
+                            )
         else:
             # assert args.lr_scheduler_type == 'constant', "we did not implement lr_schedule."
             if args.optimizer == "adam": # FIXME: what to do with this? 

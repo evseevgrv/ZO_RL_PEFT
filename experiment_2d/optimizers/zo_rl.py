@@ -77,7 +77,7 @@ class ZORL_Optimizer(BaseOptimizer):
             axis=0
         ) / (self.tau * self.K)
 
-        print(g_x)
+        # print(g_x)
 
         # e_ind = np.argmin(f_vals)
         # e_argmin = e_samples[e_ind]

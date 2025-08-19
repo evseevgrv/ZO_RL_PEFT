@@ -56,7 +56,7 @@ class ZO_SGD(ZeroOrderOptimizer):
         else:
             self.zo_perturb_parameters(scaling_factor=-2)
             loss2 = closure()
-            self.projected_grad = self.grad_approx(loss_plus=loss1, loss_minus=loss2, perturbation_mode="one_side")
+            self.projected_grad = self.grad_approx(loss_plus=loss1, loss_minus=loss2, perturbation_mode="two_side")
             self.generator.manual_seed(self.zo_random_seed)
             self.zo_perturb_parameters(scaling_factor=1)
             self.generator.manual_seed(self.zo_random_seed)
