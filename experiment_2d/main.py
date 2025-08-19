@@ -6,7 +6,7 @@ from plot import CombinedPlotter
 if __name__ == "__main__":
     d = 2
     log_files = []
-    for gamma in [1e-3]:
+    for gamma in [1e-5]:
         for eps in [1e-3]:
             print(f"RUN FOR gamma={gamma}, eps={eps}")
             eps_scheduler = None

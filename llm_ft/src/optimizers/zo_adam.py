@@ -30,8 +30,6 @@ class ZO_Adam(ZO_SGD):
             module_wise_perturbation: Whether to perturb modules separately
             coordinate_perturbation: Whether to update immediately after perturbation
         """
-        # params = list(params)
-        # self._inner_optimizer = Adam(params, lr=args.learning_rate)
         super().__init__(
             params = params, 
             lr = lr, 

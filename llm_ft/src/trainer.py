@@ -342,23 +342,21 @@ class OurTrainer(Trainer):
         }
         # FIXME: values of parameteres should be chosen by user in run_script.sh!!!
         if args.trainer == "zo_adam":
-            self.optimizer = ZO_Adam(self.model.parameters(), self.args, self.gradient_sparsity)
+            self.optimizer = ZO_Adam(self.model.parameters(), lr=args.learning_rate, eps=args.zo_eps, momentum=args.momentum, perturbation_mode=args.perturbation_mode, vector_sampling_type=args.vector_sampling_type, gradient_sparsity=self.gradient_sparsity)
         elif args.trainer == "zo_sgd":
-            self.optimizer = ZO_SGD(self.model.parameters(), lr=1e-3, eps=1e-2, momentum=0.0, gradient_sparsity=self.gradient_sparsity)
-        elif args.trainer == "zorl_sgd":
-            self.optimizer = ZORL_SGD(self.model.parameters(), tau=1e-1, lr=1e-3, eps=1e-2, momentum=0.0, gradient_sparsity=self.gradient_sparsity)
+            self.optimizer = ZO_SGD(self.model.parameters(), lr=args.learning_rate, eps=args.zo_eps, momentum=args.momentum, perturbation_mode=args.perturbation_mode, vector_sampling_type=args.vector_sampling_type, gradient_sparsity=self.gradient_sparsity)
         elif args.trainer == "zo_signsgd":
-            self.optimizer = ZO_SignSGD(self.model.parameters(), self.args, self.gradient_sparsity)
+            self.optimizer = ZO_SignSGD(self.model.parameters(), lr=args.learning_rate, eps=args.zo_eps, momentum=args.momentum, perturbation_mode=args.perturbation_mode, vector_sampling_type=args.vector_sampling_type, gradient_sparsity=self.gradient_sparsity)
         elif args.trainer == "zo_conserv":
-            self.optimizer = ZO_Conserv(self.model.parameters(), self.args, self.gradient_sparsity)
+            self.optimizer = ZO_Conserv(self.model.parameters(), lr=args.learning_rate, eps=args.zo_eps, momentum=args.momentum, perturbation_mode=args.perturbation_mode, vector_sampling_type=args.vector_sampling_type, gradient_sparsity=self.gradient_sparsity)
         elif args.trainer == "jaguar_signsgd":
-            self.optimizer = Jaguar_SignSGD(self.model.parameters(), tau=1e-1, beta=1e-2, use_smoothing=True, lr=1e-3, eps=1e-2, momentum=0.0, gradient_sparsity=self.gradient_sparsity)
+            self.optimizer = Jaguar_SignSGD(self.model.parameters(), lr=args.learning_rate, eps=args.zo_eps, momentum=args.momentum, beta=args.zo_beta, perturbation_mode=args.perturbation_mode, use_smoothing=args.zo_use_smoothing, gradient_sparsity=self.gradient_sparsity)
         elif args.trainer == "zo_muon":
-            self.optimizer = ZO_MUON(self.model.parameters(), lr=1e-3, eps=1e-2, momentum=0.0, gradient_sparsity=self.gradient_sparsity)
+            self.optimizer = ZO_MUON(self.model.parameters(), lr=args.learning_rate, eps=args.zo_eps, momentum=args.momentum, perturbation_mode=args.perturbation_mode, vector_sampling_type=args.vector_sampling_type, gradient_sparsity=self.gradient_sparsity)
         elif args.trainer == "zo_sampling_muon":
-            self.optimizer = ZO_SamplingMUON(self.model.parameters(), tau=1e-1, lr=1e-3, eps=1e-2, momentum=0.0, gradient_sparsity=self.gradient_sparsity)
+            self.optimizer = ZO_SamplingMUON(self.model.parameters(), lr=args.learning_rate, eps=args.zo_eps, momentum=args.momentum, perturbation_mode=args.perturbation_mode, vector_sampling_type=args.vector_sampling_type, matrix_sampling_type=args.matrix_sampling_type, gradient_sparsity=self.gradient_sparsity)
         elif args.trainer == "jaguar_muon":
-            self.optimizer = Jaguar_MUON(self.model.parameters(), tau=1e-1, beta=1e-2, use_smoothing=True, lr=1e-3, eps=1e-2, momentum=0.0, gradient_sparsity=self.gradient_sparsity)
+            self.optimizer = Jaguar_MUON(self.model.parameters(), lr=args.learning_rate, eps=args.zo_eps, momentum=args.momentum, beta=args.zo_beta, perturbation_mode=args.perturbation_mode, use_smoothing=args.zo_use_smoothing, gradient_sparsity=self.gradient_sparsity)
         else:
             # assert args.lr_scheduler_type == 'constant', "we did not implement lr_schedule."
             if args.optimizer == "adam": # FIXME: what to do with this? 
@@ -367,12 +365,12 @@ class OurTrainer(Trainer):
                 self.optimizer = SGD(self.model.parameters(), lr=args.learning_rate, momentum=args.momentum)
             else: 
                 raise NotImplementedError(f"Optimizer {args.optimizer} is not implemented")
-        inner_optimizers = self.optimizer._inner_optimizers
-        schedulers = [
-            get_scheduler(opt, scheduler_type=args.scheduler, num_training_steps=args.num_training_steps, warmup_steps=args.warmup_steps, min_lr_ratio=args.min_lr_ratio) 
-            for opt in inner_optimizers
-        ]
-        self.optimizer.set_lr_schedulers(schedulers)
+        # inner_optimizers = self.optimizer._inner_optimizers
+        # schedulers = [
+        #     get_scheduler(opt, scheduler_type=args.scheduler, num_training_steps=args.num_training_steps, warmup_steps=args.warmup_steps, min_lr_ratio=args.min_lr_ratio) 
+        #     for opt in inner_optimizers
+        # ]
+        # self.optimizer.set_lr_schedulers(schedulers)
 
         # self.scheduler = CosineAnnealingLR(self.optimizer, T_max=self.args.max_steps, eta_min=1e-8)
         # important: at this point:
@@ -566,7 +564,7 @@ class OurTrainer(Trainer):
                 ):
                     # MeZO added: update model with the estimated gradient
                     # Added zo_jaguar
-                    if args.trainer in ["zo_sgd", "zo_adam", "zo_signsgd","zorl_sgd", "zo_conserv", "jaguar_signsgd", "zo_muon", "zo_sampling_muon", "jaguar muon"]: # FIXME: why jaguar muon wasn't here?
+                    if args.trainer in ["zo_sgd", "zo_adam", "zo_signsgd", "zo_conserv", "jaguar_signsgd", "zo_muon", "zo_sampling_muon", "jaguar muon"]: # FIXME: why jaguar muon wasn't here?
                         self.zo_update(model)
                     elif args.trainer == "forward_grad":
                         self.forward_grad_update(model)

@@ -46,8 +46,9 @@ class ZO_Conserv(ZeroOrderOptimizer):
     @torch.no_grad()
     def _apply_update(self, projected_grad: float, sign: float = 1.0) -> None:
         """Apply parameter update using re-generated perturbation vectors."""
-        torch.manual_seed(self.zo_random_seed)
-        self.sparse_grad_rng.manual_seed(self.sparse_grad_random_seed)
+        # torch.manual_seed(self.zo_random_seed)
+        # self.sparse_grad_rng.manual_seed(self.sparse_grad_random_seed)
+        self.generator.manual_seed(self.zo_random_seed)
         
         for group in self.param_groups:
             lr = group['lr']
@@ -59,7 +60,9 @@ class ZO_Conserv(ZeroOrderOptimizer):
                 name = next((name for name, param in self.named_parameters_all 
                             if id(param) == param_id), None)
                 
-                z = torch.randn_like(p)
+                # z = torch.randn_like(p)
+                z = self.vector_sampler.sample(p.shape)
+                self.generator.manual_seed(self.zo_random_seed)
                 if name:
                     sparsity = self.get_grad_sparsity_by_name(name)
                     if sparsity is not None:
@@ -85,34 +88,44 @@ class ZO_Conserv(ZeroOrderOptimizer):
         loss0 = closure()
         
         self.zo_random_seed = np.random.randint(1000000000)
+        # FIXME: Don't see sense in self.zo_random_seed, it's easier to push this value directly to the function
+        self.generator.manual_seed(self.zo_random_seed)
         
-        self.zo_perturb_parameters(scaling_factor=1)
+        self.zo_perturb_parameters(scaling_factor=1, random_seed=self.zo_random_seed)
+        self.generator.manual_seed(self.zo_random_seed)
         loss1 = closure()
         
         if self.perturbation_mode == "one_side":
-            self.zo_perturb_parameters(scaling_factor=-1)
+            self.zo_perturb_parameters(scaling_factor=-1, random_seed=self.zo_random_seed)
+            self.generator.manual_seed(self.zo_random_seed)
             loss2 = closure()
             self.projected_grad = self.grad_approx(loss_original=loss1, loss_perturbed=loss2, perturbation_mode="one_side")
         else:  # two_side
-            self.zo_perturb_parameters(scaling_factor=-2)
+            self.zo_perturb_parameters(scaling_factor=-2, random_seed=self.zo_random_seed)
+            self.generator.manual_seed(self.zo_random_seed)
             loss2 = closure()
             self.projected_grad = self.grad_approx(loss_original=loss1, loss_perturbed=loss2, perturbation_mode="two_side")
-            self.zo_perturb_parameters(scaling_factor=1)
+            self.zo_perturb_parameters(scaling_factor=1, random_seed=self.zo_random_seed)
+            self.generator.manual_seed(self.zo_random_seed)
 
         # Trial update 1: positive direction (theta + update)
         self._apply_update(self.projected_grad, sign=1.0)
+        self.generator.manual_seed(self.zo_random_seed)
         loss1_after = closure()
         
         # Trial update 2: negative direction (theta - update)
         self._apply_update(self.projected_grad, sign=-2.0)
+        self.generator.manual_seed(self.zo_random_seed)
         loss2_after = closure()
         
         # Select best parameter state
         if loss1_after > loss0 and loss0 < loss2_after:
             self._apply_update(self.projected_grad, sign=1.0)
+            self.generator.manual_seed(self.zo_random_seed)
             final_loss = loss0
         elif loss1_after <= loss0 and loss1_after < loss2_after:
             self._apply_update(self.projected_grad, sign=2.0)
+            self.generator.manual_seed(self.zo_random_seed)
             final_loss = loss1_after
         else:
             final_loss = loss2_after

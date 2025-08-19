@@ -7,6 +7,7 @@ zero_order_optim/
 ├── perturbations.py
 ├── optimizers/
 │   ├── __init__.py
+│   ├── opt_utils/
 │   ├── zo_sgd.py
 │   ├── zo_adam.py
 │   ├── zo_conservative.py

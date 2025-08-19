@@ -65,23 +65,26 @@ class ZORL_Optimizer(BaseOptimizer):
         total_sum = np.sum(f_vals)
 
         # term_i = (self.K * f_vals - total_sum) / self.K
-        # term_x = (total_sum - f_vals) / total_sum
+        term_x = (total_sum - f_vals) / total_sum
 
         # f_current = self.f(self.x)
 
         # term_x = (f_vals - f_current) 
-        # term_i = term_x
+        term_i = term_x
         
-        # g_x = np.sum(
-        #     term_i[:, np.newaxis] * e_samples, 
-        #     axis=0
-        # ) / (self.tau * self.K)
+        g_x = np.sum(
+            term_i[:, np.newaxis] * e_samples, 
+            axis=0
+        ) / (self.tau * self.K)
 
-        e_ind = np.argmin(f_vals)
-        e_argmin = e_samples[e_ind]
-        f_plus = f_vals[e_ind]
-        f_minus = self.f(self.x - self.tau * e_argmin)
-        g_x = (f_plus - f_minus) * e_argmin / (2 * self.tau)
+        print(g_x)
+
+        # e_ind = np.argmin(f_vals)
+        # e_argmin = e_samples[e_ind]
+        # f_plus = f_vals[e_ind]
+        # f_minus = self.f(self.x - self.tau * e_argmin)
+        # g_x = (f_plus - f_minus) * e_argmin / (2 * self.tau)
+
         # print(self.x, f_plus, f_minus, g_x)
         
         term_i = (self.K * f_vals - total_sum) / self.K
