@@ -101,6 +101,7 @@ class ZORL_Optimizer(BaseOptimizer):
         
         return {
             'x': self.x.copy(),
+            'optimality_gap': np.linalg.norm((self.x - np.ones_like(self.x))),
             'mu': self.mu.copy(),
             'f_value': self.f(self.x),
             'grad_x_norm': np.linalg.norm(g_x),

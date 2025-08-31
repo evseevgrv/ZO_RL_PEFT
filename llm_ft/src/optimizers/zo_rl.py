@@ -58,6 +58,7 @@ class ZO_RL(ZeroOrderOptimizer):
             for group in self.param_groups:
                 for p in group['params']:
                     z = torch.normal(mean=self.state[p]["mu"], std=self.variance, generator=self.generator)
+                    # z /= torch.linalg.vector_norm(z)
                     perturb = z * self.zo_eps
                     perturb = perturb.to(p.device)
                     p.data.add_(perturb)
@@ -70,6 +71,7 @@ class ZO_RL(ZeroOrderOptimizer):
             for group in self.param_groups:
                 for p in group['params']:
                     z = torch.normal(mean=self.state[p]["mu"], std=self.variance, generator=self.generator)
+                    # z /= torch.linalg.vector_norm(z)
                     perturb = z * self.zo_eps
                     perturb = perturb.to(p.device)
                     p.data.add_(-perturb)
@@ -84,6 +86,7 @@ class ZO_RL(ZeroOrderOptimizer):
         for group in self.param_groups:
             for p in group['params']:
                 z = torch.normal(mean=self.state[p]["mu"], std=self.variance, generator=self.generator)
+                # z /= torch.linalg.vector_norm(z)
                 perturb = z * self.zo_eps
                 perturb = perturb.to(p.device)
                 p.data.add_(-perturb)
@@ -95,6 +98,7 @@ class ZO_RL(ZeroOrderOptimizer):
         for group in self.param_groups:
             for p in group['params']:
                 z = torch.normal(mean=self.state[p]["mu"], std=self.variance, generator=self.generator)
+                # z /= torch.linalg.vector_norm(z)
                 perturb = z * self.zo_eps
                 perturb = perturb.to(p.device)
                 p.data.add_(perturb)
@@ -116,21 +120,24 @@ class ZO_RL(ZeroOrderOptimizer):
 
                 # OPTIMIZE X
                 z = torch.normal(mean=mu, std=self.variance, generator=self.generator)
+                # z /= torch.linalg.vector_norm(z)
                 g_x = projected_grad * z 
-                p.data.add_(g_x, alpha=-self.lr)
+                sign_g_x = torch.sign(g_x)
+                p.data.add_(sign_g_x, alpha=-self.lr)
                 
                 # OPTIMIZE MU
                 e_samples_list = []
                 for seed in seeds:
                     self.generator.manual_seed(seed)
                     z = torch.normal(mean=mu, std=self.variance, generator=self.generator)
+                    # z /= torch.linalg.vector_norm(z)
                     e_samples_list.append(z)
                 e_samples = torch.stack(e_samples_list, dim=0)  # shape (k, *p.shape)
                 
-                mu_diff = mu.unsqueeze(0) - e_samples  # broadcast mu to (1, *p.shape) -> (k, *p.shape)
+                mu_diff = (mu.unsqueeze(0) - e_samples).to(p.device)  # broadcast mu to (1, *p.shape) -> (k, *p.shape)
                 
                 # Broadcast coeff to (k, 1, 1, ...) matching e_samples dims
-                expanded_coeff = coeff.view(self.k, *([1] * len(p.shape)))
+                expanded_coeff = (coeff.view(self.k, *([1] * len(p.shape)))).to(p.device)
                 
                 term = expanded_coeff * mu_diff  # shape (k, *p.shape)
                 

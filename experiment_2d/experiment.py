@@ -5,6 +5,7 @@ import seaborn as sns
 import os
 from matplotlib.lines import Line2D
 from optimizers import *
+from tqdm import tqdm
 
 class Experiment2d:
     def __init__(
@@ -70,6 +71,7 @@ class Experiment2d:
         function_name = config['function']
         
         file_name = (
+            f"d{self.optimizer.d}_"
             f"{function_name}_{optimizer_name}_"
             f"gamma{gamma_str}_eps{eps_str}_"
             f"tau{tau_str}_K{K_val}_"
@@ -80,6 +82,7 @@ class Experiment2d:
         
         initial_metrics = {
             'x': self.optimizer.x.copy(),
+            'optimality_gap': 0.0,
             'f_value': self.optimizer.f(self.optimizer.x),
             'grad_x_norm': 0.0,
             'grad_x': np.zeros(self.optimizer.d)
@@ -105,7 +108,7 @@ class Experiment2d:
             if hasattr(self.optimizer, 'has_mu') and self.optimizer.has_mu:
                 trajectory_mu = [self.optimizer.mu.copy()]
 
-            for step in range(1, num_steps + 1):
+            for step in tqdm(range(1, num_steps + 1)):
                 metrics = self.optimizer.step()
                 
                 trajectory_x.append(metrics['x'].copy())
