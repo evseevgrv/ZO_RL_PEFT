@@ -23,13 +23,17 @@ class MatrixSampler:
             self.sampler = self._reflection_matrix
         elif self.sampler_type == 'Random_baseline':        # + +
             self.sampler = self._random_baseline
+        elif self.sampler_type == 'Torch_QR':        # + +
+            self.sampler = self._torch_qr
         else:
             raise NotImplementedError(f"Sampling {self.sampler_type} is not implemented")
         
     def sample_single_matrix(self, param_shape, generator = None):
         assert len(param_shape) > 1, f"Sample only matrices, current shape: {param_shape}"
         n, m = param_shape
-        if n > m:
+        if self.sampler_type == 'Torch_QR':
+            return self.sampler(n, m, generator=generator)
+        elif n > m:
             return self.sampler(n, generator=generator)[:, :m]
         return self.sampler(m, generator=generator)[:n, :]
 
@@ -72,31 +76,8 @@ class MatrixSampler:
 
         return H
 
-
-    # def _rotation_matrix(self, d, num_rotations=None, generator = None):
-    #     if num_rotations is None:
-    #         num_rotations = d
-    #     Q = torch.eye(d, device=self.device)
-    #     for _ in range(num_rotations):
-    #         i, j = torch.randint(0, d, (2,), device=self.device, generator=generator)
-    #         while i == j:
-    #             j = torch.randint(0, d, (1,), device=self.device, generator=generator)
-    #             j = j.item()
-    #         theta = torch.rand(1, device=self.device, generator=generator) * 2 * math.pi
-    #         c = torch.cos(theta)
-    #         s = torch.sin(theta)
-    #         col_i = Q[:, i].clone()
-    #         col_j = Q[:, j].clone()
-    #         Q[:, i] = c * col_i - s * col_j
-    #         Q[:, j] = s * col_i + c * col_j
-    #     return Q
-
-
     def _rotation_matrix(self, d, num_rotations=None, generator=None):
-        if self.device == 'cpu':
-            return self._rotation_matrix_sequential(d, num_rotations, generator)
-        else:
-            return self._rotation_matrix_parallel(d, num_rotations, generator)
+        return self._rotation_matrix_sequential(d, num_rotations, generator)
     
     def _rotation_matrix_sequential(self, d, num_rotations=None, generator=None):
         if num_rotations is None:
@@ -135,25 +116,6 @@ class MatrixSampler:
         
         return Q
     
-    def _rotation_matrix_parallel(self, d, num_rotations=None, generator=None):
-        if num_rotations is None:
-            num_rotations = min(d, d*(d-1)//2)
-        
-        if generator is None:
-            generator = torch.Generator(device=self.device)
-        
-        A = torch.randn(d, d, device=self.device, generator=generator, dtype=torch.float32)
-        A = (A - A.T) / 2
-        
-        scale = num_rotations / (d * (d-1) / 2)
-        A = A * scale
-        
-        Q = torch.matrix_exp(A)
-        
-        return Q
-
-
-
     def _reflection_matrix(self, d, generator=None):
         if generator is None:
             generator = torch.Generator(device=self.device)
@@ -276,3 +238,6 @@ class MatrixSampler:
         A = A[idx_PL, :]
         
         return A
+    
+    def _torch_qr(self, n, m, generator=None):
+        return torch.nn.init.orthogonal_(torch.empty((n, m), device=self.device), generator=generator)

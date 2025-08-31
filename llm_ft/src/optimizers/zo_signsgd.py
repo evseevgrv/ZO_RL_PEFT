@@ -10,12 +10,10 @@ class ZO_SignSGD(ZO_SGD):
             params: Union[Iterable[torch.Tensor], Iterable[Dict[str, Any]]], 
             lr: Optional[float] = None,
             eps: Optional[float] = None,
-            momentum: float = 0.0,
-            gradient_sparsity: Optional[Union[float, Dict[str, float]]] = None,
+            momentum: float = None,
+            weight_decay: float = 0.0,
+            vector_sampling_type: str = "standard_normal",
             perturbation_mode: str = "two_side",
-            q: int = 1,
-            module_wise_perturbation: bool = False,
-            coordinate_perturbation: bool = False
     ):
         """
         Zero-Order Stochastic Gradient Descent optimizer (MeZO implementation).
@@ -37,33 +35,18 @@ class ZO_SignSGD(ZO_SGD):
             lr = lr, 
             eps = eps,
             momentum = momentum,
-            gradient_sparsity = gradient_sparsity,
             perturbation_mode = perturbation_mode,
-            q = q,
-            module_wise_perturbation = module_wise_perturbation,
-            coordinate_perturbation = coordinate_perturbation
             )
         
     def grad_approx(
         self,
-        loss_original: torch.Tensor,
-        loss_perturbed: torch.Tensor,
+        loss_plus: torch.Tensor,
+        loss_minus: torch.Tensor,
         perturbation_mode: str = "two_side"
-    ) -> int:
-        """
-        Aproximates gradient, takes the sign of the approximation.
-        
-        Args:
-            loss_original: Loss function value in a source point
-            loss_perturbed: Loss function value is a perturbated point
-            perturbation_mode: 'one_side' or 'two_side'
-            
-        Returns:
-            Gradient estimation
-        """
+    ) -> float:
         if perturbation_mode == "one_side":
-            return torch.sign(((loss_perturbed - loss_original) / self.zo_eps).item())
+            return torch.sign(loss_plus - loss_minus)
         elif perturbation_mode == "two_side":
-            return torch.sign(((loss_perturbed - loss_original) / (2 * self.zo_eps)).item())
+            return  torch.sign((loss_plus - loss_minus) / 2)
         else:
             raise ValueError(f"Unknown perturbation mode: {perturbation_mode}")

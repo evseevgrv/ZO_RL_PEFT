@@ -150,11 +150,10 @@ class OurTrainer(Trainer):
         self.perturb_module_regex = perturb_module_regex
         self.gradient_sparsity = None # FIXME: is it ok?
 
-    # def create_optimizer_and_scheduler(self, num_training_steps):
-        # self.optimizer = SGD(self.model.parameters(), lr=self.args.learning_rate,)
-        # self.lr_scheduler = get_linear_schedule_with_warmup(self.optimizer, num_training_steps=self.args.max_steps, num_warmup_steps=1000)
-        # self.lr_scheduler = get_polynomial_decay_schedule_with_warmup(self.optimizer, num_warmup_steps=100, num_training_steps=self.args.max_steps, power=4)
-    # #     # self.lr_scheduler = get_cosine_schedule_with_warmup(self.optimizer, num_warmup_steps=1000, num_training_steps=self.args.max_steps)
+    def create_optimizer_and_scheduler(self, num_training_steps):
+        # self.optimizer = ""
+        # self.lr_scheduler = get_cosine_schedule_with_warmup(self.optimizer)
+        pass
 
     def _inner_training_loop(
             self, batch_size=None, args=None, resume_from_checkpoint=None, trial=None, ignore_keys_for_eval=None
@@ -342,21 +341,21 @@ class OurTrainer(Trainer):
         }
         # FIXME: values of parameteres should be chosen by user in run_script.sh!!!
         if args.trainer == "zo_adam":
-            self.optimizer = ZO_Adam(self.model.parameters(), lr=args.learning_rate, eps=args.zo_eps, momentum=args.momentum, perturbation_mode=args.perturbation_mode, vector_sampling_type=args.vector_sampling_type, gradient_sparsity=self.gradient_sparsity)
+            self.optimizer = ZO_Adam(self.model.parameters(), lr=args.learning_rate, eps=args.zo_eps, momentum=args.momentum, perturbation_mode=args.perturbation_mode, vector_sampling_type=args.vector_sampling_type)
         elif args.trainer == "zo_sgd":
-            self.optimizer = ZO_SGD(self.model.parameters(), lr=args.learning_rate, eps=args.zo_eps, momentum=args.momentum, perturbation_mode=args.perturbation_mode, vector_sampling_type=args.vector_sampling_type, gradient_sparsity=self.gradient_sparsity)
+            self.optimizer = ZO_SGD(self.model.parameters(), lr=args.learning_rate, eps=args.zo_eps, momentum=args.momentum, perturbation_mode=args.perturbation_mode, vector_sampling_type=args.vector_sampling_type)
         elif args.trainer == "zo_signsgd":
-            self.optimizer = ZO_SignSGD(self.model.parameters(), lr=args.learning_rate, eps=args.zo_eps, momentum=args.momentum, perturbation_mode=args.perturbation_mode, vector_sampling_type=args.vector_sampling_type, gradient_sparsity=self.gradient_sparsity)
+            self.optimizer = ZO_SignSGD(self.model.parameters(), lr=args.learning_rate, eps=args.zo_eps, momentum=args.momentum, perturbation_mode=args.perturbation_mode, vector_sampling_type=args.vector_sampling_type)
         elif args.trainer == "zo_conserv":
-            self.optimizer = ZO_Conserv(self.model.parameters(), lr=args.learning_rate, eps=args.zo_eps, momentum=args.momentum, perturbation_mode=args.perturbation_mode, vector_sampling_type=args.vector_sampling_type, gradient_sparsity=self.gradient_sparsity)
+            self.optimizer = ZO_Conserv(self.model.parameters(), lr=args.learning_rate, eps=args.zo_eps, momentum=args.momentum, perturbation_mode=args.perturbation_mode, vector_sampling_type=args.vector_sampling_type)
         elif args.trainer == "jaguar_signsgd":
-            self.optimizer = Jaguar_SignSGD(self.model.parameters(), lr=args.learning_rate, eps=args.zo_eps, momentum=args.momentum, beta=args.zo_beta, perturbation_mode=args.perturbation_mode, use_smoothing=args.zo_use_smoothing, gradient_sparsity=self.gradient_sparsity)
+            self.optimizer = Jaguar_SignSGD(self.model.parameters(), lr=args.learning_rate, eps=args.zo_eps, beta=args.zo_beta, perturbation_mode=args.perturbation_mode)
         elif args.trainer == "zo_muon":
-            self.optimizer = ZO_MUON(self.model.parameters(), lr=args.learning_rate, eps=args.zo_eps, momentum=args.momentum, perturbation_mode=args.perturbation_mode, vector_sampling_type=args.vector_sampling_type, gradient_sparsity=self.gradient_sparsity)
+            self.optimizer = ZO_MUON(self.model.parameters(), lr=args.learning_rate, eps=args.zo_eps, perturbation_mode=args.perturbation_mode, vector_sampling_type=args.vector_sampling_type)
         elif args.trainer == "zo_sampling_muon":
-            self.optimizer = ZO_SamplingMUON(self.model.parameters(), lr=args.learning_rate, eps=args.zo_eps, momentum=args.momentum, perturbation_mode=args.perturbation_mode, vector_sampling_type=args.vector_sampling_type, matrix_sampling_type=args.matrix_sampling_type, gradient_sparsity=self.gradient_sparsity)
+            self.optimizer = ZO_SamplingMUON(self.model.parameters(), lr=args.learning_rate, eps=args.zo_eps, perturbation_mode=args.perturbation_mode, vector_sampling_type=args.vector_sampling_type, matrix_sampling_type=args.matrix_sampling_type)
         elif args.trainer == "jaguar_muon":
-            self.optimizer = Jaguar_MUON(self.model.parameters(), lr=args.learning_rate, eps=args.zo_eps, momentum=args.momentum, beta=args.zo_beta, perturbation_mode=args.perturbation_mode, use_smoothing=args.zo_use_smoothing, gradient_sparsity=self.gradient_sparsity)
+            self.optimizer = Jaguar_MUON(self.model.parameters(), lr=args.learning_rate, eps=args.zo_eps, beta=args.zo_beta, perturbation_mode=args.perturbation_mode)
         elif args.trainer == "zo_rl":
             self.optimizer = ZO_RL(self.model.parameters(), lr=args.learning_rate, eps=args.zo_eps, momentum=args.momentum, 
                                 perturbation_mode=args.perturbation_mode, 
@@ -370,14 +369,10 @@ class OurTrainer(Trainer):
                 self.optimizer = SGD(self.model.parameters(), lr=args.learning_rate, momentum=args.momentum)
             else: 
                 raise NotImplementedError(f"Optimizer {args.optimizer} is not implemented")
-        # inner_optimizers = self.optimizer._inner_optimizers
-        # schedulers = [
-        #     get_scheduler(opt, scheduler_type=args.scheduler, num_training_steps=args.num_training_steps, warmup_steps=args.warmup_steps, min_lr_ratio=args.min_lr_ratio) 
-        #     for opt in inner_optimizers
-        # ]
-        # self.optimizer.set_lr_schedulers(schedulers)
 
-        # self.scheduler = CosineAnnealingLR(self.optimizer, T_max=self.args.max_steps, eta_min=1e-8)
+        self.scheduler = get_scheduler(optimizer=self.optimizer, scheduler_type=args.scheduler, num_training_steps=args.num_training_steps,
+                                        warmup_steps=args.warmup_steps, min_lr_ratio=args.min_lr_ratio)
+        # self.scheduler = get_cosine_schedule_with_warmup(self.optimizer, num_warmup_steps=0, num_training_steps=args.num_training_steps)
         # important: at this point:
         # self.model         is the Transformers Model
         # self.model_wrapped is DDP(Transformers Model), Deepspeed(Transformers Model), etc.
@@ -539,12 +534,9 @@ class OurTrainer(Trainer):
                     self.control = self.callback_handler.on_step_begin(args, self.state, self.control)
 
                 closure = self.create_closure(model, inputs)
-                tr_loss_step = self.optimizer.step(closure)       
-                # if args.trainer == "jaguar_muon":            
-                #     for scheduler in schedulers:
-                #         scheduler.step()
-                # self.scheduler.step()
-                # print(f"Step {total_steps}, LR: {self.optimizer.param_groups[0]['lr']:.2e}")
+                tr_loss_step = self.optimizer.step(closure)     
+                self.scheduler.step()
+                # print(f"Step {total_steps}, LR: {self.optimizer.param_groups[0]['lr']}")
 
                 if (
                         args.logging_nan_inf_filter
@@ -567,15 +559,7 @@ class OurTrainer(Trainer):
                         steps_in_epoch <= args.gradient_accumulation_steps
                         and (step + 1) == steps_in_epoch
                 ):
-                    # MeZO added: update model with the estimated gradient
-                    # Added zo_jaguar
-                    if args.trainer in ["zo_sgd", "zo_adam", "zo_signsgd", "zo_conserv", "jaguar_signsgd", "zo_muon", "zo_sampling_muon", "jaguar muon"]: # FIXME: why jaguar muon wasn't here?
-                        self.zo_update(model)
-                    elif args.trainer == "forward_grad":
-                        self.forward_grad_update(model)
-                    else:
-                        self.gradient_update(model)
-
+                    
                     self.state.global_step += 1
                     self.state.epoch = epoch + (step + 1) / steps_in_epoch
                     self.control = self.callback_handler.on_step_end(args, self.state, self.control)
@@ -704,62 +688,6 @@ class OurTrainer(Trainer):
 
         return TrainOutput(self.state.global_step, train_loss, metrics)
 
-    ############## MeZO ##############
-
-    def gradient_update(self, model):
-        args = self.args
-
-        # Gradient clipping
-        if args.max_grad_norm is not None and args.max_grad_norm > 0 and not self.deepspeed:
-            # deepspeed does its own clipping
-
-            if self.do_grad_scaling:
-                # Reduce gradients first for XLA
-                if is_torch_tpu_available():
-                    gradients = xm._fetch_gradients(self.optimizer)
-                    xm.all_reduce("sum", gradients, scale=1.0 / xm.xrt_world_size())
-                # AMP: gradients need unscaling
-                self.scaler.unscale_(self.optimizer)
-
-            if is_sagemaker_mp_enabled() and args.fp16:
-                self.optimizer.clip_master_grads(args.max_grad_norm)
-            elif hasattr(self.optimizer, "clip_grad_norm"):
-                # Some optimizers (like the sharded optimizer) have a specific way to do gradient clipping
-                self.optimizer.clip_grad_norm(args.max_grad_norm)
-            elif hasattr(model, "clip_grad_norm_"):
-                # Some models (like FullyShardedDDP) have a specific way to do gradient clipping
-                model.clip_grad_norm_(args.max_grad_norm)
-            else:
-                # Revert to normal clipping otherwise, handling Apex or full precision
-                nn.utils.clip_grad_norm_(
-                    amp.master_params(self.optimizer) if self.use_apex else model.parameters(),
-                    args.max_grad_norm,
-                )
-
-        # Optimizer step
-        optimizer_was_run = True
-        if self.deepspeed:
-            pass  # called outside the loop
-        elif is_torch_tpu_available():
-            if self.do_grad_scaling:
-                self.scaler.step(self.optimizer)
-                self.scaler.update()
-            else:
-                xm.optimizer_step(self.optimizer)
-        elif self.do_grad_scaling:
-            scale_before = self.scaler.get_scale()
-            self.scaler.step(self.optimizer)
-            self.scaler.update()
-            scale_after = self.scaler.get_scale()
-            optimizer_was_run = scale_before <= scale_after
-        else:
-            # self.optimizer.step()
-            pass # FIXME: fix this part
-
-        if optimizer_was_run and not self.deepspeed:
-            self.lr_scheduler.step()
-        model.zero_grad()
-
     def create_closure(self, model, inputs):
         '''
         Creates closure for optimizer step.
@@ -863,6 +791,7 @@ class OurTrainer(Trainer):
             loss.backward()
 
         # Sparse gradient
+        # FIXME: do we need it? 
         self.sparse_grad_rng.manual_seed(self.sparse_grad_random_seed)
         for name, param in model.named_parameters():
             if not param.requires_grad:
@@ -872,161 +801,6 @@ class OurTrainer(Trainer):
                 param.grad[fast_random_mask_like(param.grad, grad_sparsity, generator=self.sparse_grad_rng)] = 0
 
         return loss.detach()
-
-    @staticmethod
-    def grouped_module_iter(model: nn.Module, group_level: str) -> Iterable[nn.Module]:
-        """
-        Iterate over the top-level modules of a model and yield groups of modules that should be trained together.
-
-        Parameters
-        ----------
-        model: nn.Module
-            The model to iterate over.
-        group_level: str
-            The level at which to iterate over the model. One of "transformer", "mlp-attn", "linear"
-        """
-        reg_pattern = OPT_PERTURBATION_LEVEL_TO_REGEX[group_level]
-        for name, module in model.named_modules():
-            if re.match(reg_pattern, name):
-                yield name, module
-
-    ### NEW PERAMETER PERTRUB JAGUAR ### :
-    """def zo_perturb_parameters(self, random_seed=None, scaling_factor=1):
-        # Set the random seed to ensure that we sample the same z for perturbation/update
-        torch.manual_seed(random_seed if random_seed is not None else self.zo_random_seed)
-        self.sparse_grad_rng.manual_seed(self.sparse_grad_random_seed)
-
-        for name, param in self.named_parameters_to_optim:
-            grad_sparsity = self.get_grad_sparsity_by_name(name)
-            z = torch.normal(mean=0, std=1, size=param.data.size(), device=param.data.device, dtype=param.data.dtype)
-            if grad_sparsity is not None:
-                z[fast_random_mask_like(z, grad_sparsity, generator=self.sparse_grad_rng)] = 0
-            param.data = param.data + scaling_factor * z * self.args.zo_eps"""
-
-    def jaguar_pertrub_parsmeters(self, param, selected_rows, selected_cols, scaling_factor=1):
-        """
-        Perturb the parameter at the selected submatrix with tau.
-        Input:
-        - param: the parameter to perturb (torch.Tensor)
-        - selected_rows: list of row indices to perturb
-        - selected_cols: list of column indices to perturb
-        - scaling_factor: scaling factor for the perturbation (float)
-        """
-        tau = self.args.zo_tau
-        tau_update_vector = torch.zeros_like(param.data)
-        # tau_update_vector[r, c] = τ
-        tau_update_vector[selected_rows[:, None], selected_cols] = tau  
-        param.data = param.data + scaling_factor * tau_update_vector
-    
-    def zo_muon_pertrub_parameters(self, E, scaling_factor=1, random_seed=None):
-        torch.manual_seed(random_seed if random_seed is not None else self.zo_random_seed)
-        self.sparse_grad_rng.manual_seed(self.sparse_grad_random_seed)
-        for name, param in self.named_parameters_to_optim:
-            # grad_sparsity = self.get_grad_sparsity_by_name(name)
-            # z = torch.normal(mean=0, std=1, size=param.data.size(), device=param.data.device, dtype=param.data.dtype)
-            # if grad_sparsity is not None:
-                # z[fast_random_mask_like(z, grad_sparsity, generator=self.sparse_grad_rng)] = 0
-            param.data.add(scaling_factor * E * self.args.zo_tau) 
-    
-    def zo_update(self, model):
-        """
-        Update the parameters with the estimated gradients.
-        """
-        # # Optimizer step
-        # self.optimizer.step()
-        # print(type(self.optimizer), self.optimizer)
-        self.lr_scheduler.step()  # NOTE When we use own optimizer, this will no longer update the lr anymore.
-        # self.optimizer.zero_grad()
-        # model.zero_grad()
-
-    @staticmethod
-    @torch.no_grad()
-    def functional_call_loss(params, names, buffers, model, batch):
-        params = {k: v for k, v in zip(names, params)}
-        outputs = functional_call(model, (params, buffers), tuple(), kwargs=batch)
-        return outputs
-
-    def forward_grad_step(self, model, inputs):
-        """
-        Forward Gradient Method
-
-        Paper: Gradients without Backpropagation
-        https://arxiv.org/pdf/2202.08587.pdf
-        """
-        args = self.args
-        # print(model.__dict__)
-        # What parameters to optimize
-        self.named_parameters_to_optim = []
-        for name, param in model.named_parameters():
-            if param.requires_grad:
-                self.named_parameters_to_optim.append((name, param))
-                param.grad = None
-                # this is not memory efficient.
-                # param.grad = torch.zeros_like(param.data)
-
-        # Sample the random seed for sampling vs
-        self.zo_random_seed = np.random.randint(1000000000)
-        torch.manual_seed(self.zo_random_seed)
-
-        loss = 0
-        vs = [torch.randn_like(p) for _, p in self.named_parameters_to_optim]
-
-        assert args.q == 1, "q > 1"
-
-        # fixme: this is a workaround for device map error when using jvp
-        inputs = {
-            k: v.to(device=model.device) if isinstance(v, torch.Tensor) else v for k, v in inputs.items()
-        }
-        f = partial(
-            self.functional_call_loss,
-            names=[n for n, _ in self.named_parameters_to_optim], buffers=dict(model.named_buffers()),
-            model=model, batch=inputs
-        )
-
-        # jvp profiling
-        # torch.cuda.reset_peak_memory_stats()
-        loss_, jvp_ = jvp(f, (list([p for _, p in self.named_parameters_to_optim]),), (vs,))
-        # print(f"JVP peak memory usage: {torch.cuda.max_memory_allocated() / 1024 ** 3:.2f} GB")
-
-        # print(len(jvp_), jvp_[0], jvp_[1].shape, len(jvp_[2][0][0]))
-        # for v, p in zip(vs, [p for _, p in self.named_parameters_to_optim]):
-        #     p.grad += v * jvp_[0].to(p.device)
-        jvp_ = jvp_[0]
-        with torch.no_grad():
-            for v, (n, p) in zip(vs, [(n, p) for n, p in self.named_parameters_to_optim]):
-                # p.grad += v * jvp_[0].to(p.device)
-                # p.grad.add_(v * jvp_[0].to(p.device))
-                # grad = v * jvp_[0].to(p.device) / args.q
-
-                if "bias" not in n and "layer_norm" not in n and "layernorm" not in n:
-                    p.data.sub_(self._get_learning_rate() * (v * jvp_.to(p.device) + args.weight_decay * p.data))
-                else:
-                    p.data.sub_(self._get_learning_rate() * (v * jvp_.to(p.device)))
-        loss += loss_[0].item()
-
-        # for name, param in self.named_parameters_to_optim:
-        #     param.grad = param.grad / args.q
-
-        # for name, param in self.named_parameters_to_optim:
-        #     if "bias" not in name and "layer_norm" not in name and "layernorm" not in name:
-        #         param.data = param.data - self._get_learning_rate() * (param.grad + args.weight_decay * param.data)
-        #     else:
-        #         param.data = param.data - self._get_learning_rate() * (param.grad)
-
-        return torch.tensor(loss)
-
-    def forward_grad_update(self, model):
-        """
-        Update the parameters with the estimated gradients from forward_grad_step.
-        """
-        args = self.args
-        # for name, param in self.named_parameters_to_optim:
-        #     if "bias" not in name and "layer_norm" not in name and "layernorm" not in name:
-        #         param.data = param.data - self._get_learning_rate() * (param.grad + args.weight_decay * param.data)
-        #     else:
-        #         param.data = param.data - self._get_learning_rate() * (param.grad)
-
-        self.lr_scheduler.step()
 
     ############## Misc overload functions ##############
 

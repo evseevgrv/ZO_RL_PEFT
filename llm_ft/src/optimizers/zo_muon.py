@@ -6,26 +6,22 @@ from typing import Optional, Callable, Dict, Any, Union, List, Iterable, Tuple
 from .opt_utils import *
 
 class ZO_MUON(ZeroOrderOptimizer):
-    def __init__(self, 
+    def __init__(self, # FIXME: add Muon momentum 
             params: Union[Iterable[torch.Tensor], Iterable[Dict[str, Any]]], 
             lr: Optional[float] = None,
             eps: Optional[float] = None,
-            momentum: float = 0.0,
-            gradient_sparsity: Optional[Union[float, Dict[str, float]]] = None,
-            matrix_sampling_type: str = "Random_baseline",
             vector_sampling_type: str = "standard_normal",
+            matrix_sampling_type: str = "Random_baseline",
             perturbation_mode: str = "two_side"
         ):
         super().__init__(
-            params=params,
+            params,
             lr=lr,
             eps=eps,
-            momentum=momentum,
             vector_sampling_type=vector_sampling_type,
             matrix_sampling_type=matrix_sampling_type,
-            gradient_sparsity=gradient_sparsity,
+            perturbation_mode=perturbation_mode,
         )
-        self.lr = lr 
         self.perturbation_mode = perturbation_mode
 
     @torch.no_grad()
@@ -46,18 +42,20 @@ class ZO_MUON(ZeroOrderOptimizer):
             self.generator.manual_seed(self.zo_random_seed)
             if closure is not None:
                 loss2 = closure()
-            self.projected_grad = self.grad_approx(loss_plus=loss1, loss_minus=loss2, perturbation_mode="one_side")
+            projected_grad = self.grad_approx(loss_plus=loss1, loss_minus=loss2, perturbation_mode="one_side")
         else:  
             self.matrix_perturb_parameters(scaling_factor=-2)
             self.generator.manual_seed(self.zo_random_seed)
             if closure is not None:
                 loss2 = closure()
-            self.projected_grad = self.grad_approx(loss_plus=loss1, loss_minus=loss2, perturbation_mode="two_side")
+            projected_grad = self.grad_approx(loss_plus=loss1, loss_minus=loss2, perturbation_mode="two_side")
             self.matrix_perturb_parameters(scaling_factor=1)
             self.generator.manual_seed(self.zo_random_seed)
         
         self.generator.manual_seed(self.zo_random_seed)
         for group_idx, group in enumerate(self.param_groups):
+            lr = group['lr']
+            eps = group['eps']
             for param in group['params']:
                 device = param.device
 
@@ -68,15 +66,12 @@ class ZO_MUON(ZeroOrderOptimizer):
                 
                 self.generator.manual_seed(self.zo_random_seed)
 
-                grad_update = self.projected_grad * z
+                grad_update = projected_grad * z / eps 
 
                 if param.ndim >= 2:
-                    grad_update = zeropower_via_newtonschulz5(grad_update, steps=5)
+                    grad_final = zeropower_via_newtonschulz5(grad_update, steps=5)
                 else:
-                    grad_update = torch.sign(grad_update)
+                    grad_final = torch.sign(grad_update)
 
-                grad_update_final = grad_update.to(device)
-                
-                param.data.add_(grad_update_final, alpha=-self.lr) 
-
+                param.data.add_(grad_final.to(device), alpha=-lr) 
         return loss1

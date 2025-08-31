@@ -10,25 +10,18 @@ class ZO_SamplingMUON(ZeroOrderOptimizer):
             params: Union[Iterable[torch.Tensor], Iterable[Dict[str, Any]]], 
             lr: Optional[float] = None,
             eps: Optional[float] = None,
-            momentum: float = 0.0,
-            gradient_sparsity: Optional[Union[float, Dict[str, float]]] = None,
             matrix_sampling_type: str = "Householder_reflection",
             vector_sampling_type: str = "standard_normal",
-            perturbation_mode: str = "two_side",
-            device: str = "cuda" # FIXME: maybe change it
+            perturbation_mode: str = "two_side"
         ):
         super().__init__(
-            params=params,
+            params,
             lr=lr,
             eps=eps,
-            momentum=momentum,
-            gradient_sparsity=gradient_sparsity,
             vector_sampling_type=vector_sampling_type,
             matrix_sampling_type=matrix_sampling_type,
-            device=device,
+            perturbation_mode=perturbation_mode,
         )
-        self.lr = lr
-        self.perturbation_mode = perturbation_mode
 
     @torch.no_grad()
     def step(self, closure=None):
@@ -48,18 +41,20 @@ class ZO_SamplingMUON(ZeroOrderOptimizer):
             self.generator.manual_seed(self.zo_random_seed)
             if closure is not None:
                 loss2 = closure()
-            self.projected_grad = torch.sign(loss1 - loss2).item()
+            projected_grad = torch.sign(loss1 - loss2).item()
         else:  
             self.matrix_perturb_parameters(scaling_factor=-2)
             self.generator.manual_seed(self.zo_random_seed)
             if closure is not None:
                 loss2 = closure()
-            self.projected_grad = torch.sign(loss1 - loss2).item()
+            projected_grad = torch.sign(loss1 - loss2).item()
             self.matrix_perturb_parameters(scaling_factor=1)
             self.generator.manual_seed(self.zo_random_seed)
         
         self.generator.manual_seed(self.zo_random_seed)
         for group_idx, group in enumerate(self.param_groups):
+            lr = group['lr']
+            eps = group['eps']
             for param in group['params']:
                 device = param.device
 
@@ -68,8 +63,7 @@ class ZO_SamplingMUON(ZeroOrderOptimizer):
                 else:
                     z = self.vector_sampler.sample(param.shape, generator=self.generator).to(device)
 
-                grad_update_final = self.projected_grad * z
-                grad_update_final = grad_update_final.to(device)
+                grad_final = projected_grad * z / eps
 
-                param.data.add_(grad_update_final, alpha=-self.lr) 
+                param.data.add_(grad_final.to(device), alpha=-lr) 
         return loss1
