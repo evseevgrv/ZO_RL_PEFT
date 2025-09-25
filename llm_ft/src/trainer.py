@@ -85,7 +85,7 @@ from transformers.utils import (
 
 # from torch.optim.optimizer import StateDict, params_t
 import wandb
-from clearml import Task
+# from clearml import Task
 from training_utils import * 
 
 from gradient_pruning.pruning_utils import (
@@ -357,10 +357,29 @@ class OurTrainer(Trainer):
         elif args.trainer == "jaguar_muon":
             self.optimizer = Jaguar_MUON(self.model.parameters(), lr=args.learning_rate, eps=args.zo_eps, beta=args.zo_beta, perturbation_mode=args.perturbation_mode)
         elif args.trainer == "zo_rl":
-            self.optimizer = ZO_RL(self.model.parameters(), lr=args.learning_rate, eps=args.zo_eps, momentum=args.momentum, 
-                                perturbation_mode=args.perturbation_mode, 
-                                k=args.k_value, variance=args.variance, lr_mu=args.lr_mu
-                            )
+            params = [p for p in model.parameters() if p.requires_grad]
+            # Compute initial gradients for mu0 initialization if using ZO_RL
+            logger.info("Computing initial gradients for mu0 initialization")
+            # Get the first batch from the dataloader
+            first_batch = next(iter(train_dataloader))
+            # Prepare inputs
+            first_batch = self._prepare_inputs(first_batch)
+            # Compute loss and gradients
+            self.model.train()
+            with self.compute_loss_context_manager():
+                loss = self.compute_loss(self.model, first_batch)
+            if self.args.n_gpu > 1:
+                loss = loss.mean()
+            loss.backward()
+            # print("ALL GRADS", all([p.grad is not None for p in self.model.parameters() if p.requires_grad]))
+            # Note: We don't apply optimizer step here, just compute gradients for initialization
+            # The optimizer will use these param.grad in its first step for mu0
+            # print("LRLRLRLR",args.learning_rate)
+            self.optimizer = ZO_RL(
+                params, lr=args.learning_rate, eps=args.zo_eps, momentum=args.momentum, 
+                perturbation_mode=args.perturbation_mode, 
+                k=args.k_value, variance=args.variance, lr_mu=args.lr_mu, mu0=True
+            )
         else:
             # assert args.lr_scheduler_type == 'constant', "we did not implement lr_schedule."
             if args.optimizer == "adam": # FIXME: what to do with this? 
@@ -370,9 +389,9 @@ class OurTrainer(Trainer):
             else: 
                 raise NotImplementedError(f"Optimizer {args.optimizer} is not implemented")
 
-        self.scheduler = get_scheduler(optimizer=self.optimizer, scheduler_type=args.scheduler, num_training_steps=args.num_training_steps,
+        self.lr_scheduler = get_scheduler(optimizer=self.optimizer, scheduler_type=args.scheduler, num_training_steps=args.num_training_steps,
                                         warmup_steps=args.warmup_steps, min_lr_ratio=args.min_lr_ratio)
-        # self.scheduler = get_cosine_schedule_with_warmup(self.optimizer, num_warmup_steps=0, num_training_steps=args.num_training_steps)
+        # self.lr_scheduler = get_cosine_schedule_with_warmup(self.optimizer, num_warmup_steps=0, num_training_steps=args.num_training_steps)
         # important: at this point:
         # self.model         is the Transformers Model
         # self.model_wrapped is DDP(Transformers Model), Deepspeed(Transformers Model), etc.
@@ -535,7 +554,7 @@ class OurTrainer(Trainer):
 
                 closure = self.create_closure(model, inputs)
                 tr_loss_step = self.optimizer.step(closure)     
-                self.scheduler.step()
+                self.lr_scheduler.step()
                 # print(f"Step {total_steps}, LR: {self.optimizer.param_groups[0]['lr']}")
 
                 if (

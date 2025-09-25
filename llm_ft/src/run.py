@@ -3,7 +3,7 @@ import os
 import random
 
 import wandb
-from clearml import Task
+# from clearml import Task
 from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
 from torch.utils.data import Dataset
 from tqdm import tqdm
@@ -169,7 +169,7 @@ class OurArguments(TrainingArguments):
     warmup_steps: int = 0
     min_lr_ratio: float = 0.1
     scheduler_cycle_length: int = 1
-
+    learning_rate: float
     k_value: int = 10 
     variance: float = 1e-3
     lr_mu: float = None 
@@ -641,7 +641,7 @@ def main():
         args.mode = "prompt"
     else:
         args.mode = "ft"
-    args.tag = f"{args.trainer}-{args.task_name}-{args.template_ver}-{args.model_name.split('/')[-1]}-OPTIM_{args.mode}-STEP{args.max_steps}-{args.optimizer}-LR{args.learning_rate}-{args.lr_scheduler_type}-ZOEPS{args.zo_eps}-Q{args.q}-MATRXSAMPLING{args.matrix_sampling_type}-VECTORSAMPLING{args.vector_sampling_type}"
+    args.tag = f"{args.trainer}-{args.task_name}-{args.template_ver}-{args.model_name.split('/')[-1]}-OPTIM_{args.mode}-STEP{args.max_steps}-{args.optimizer}-LR{args.learning_rate}-LR_MU{args.lr_mu}-{args.lr_scheduler_type}-ZOEPS{args.zo_eps}-Q{args.q}-MATRXSAMPLING{args.matrix_sampling_type}-VECTORSAMPLING{args.vector_sampling_type}"
     args.tag = "momen" + args.tag if args.momentum > 0 else args.tag
     args.tag = f"sparse_grad-{args.gradient_sparsity}-{args.sparse_gradient_group}-{args.sparse_gradient_resample_steps}-" + args.tag if args.gradient_sparsity is not None else args.tag
     args.tag = f"module_perturb-{args.perturbed_module_level}-" + args.tag if args.module_wise_perturbation else args.tag

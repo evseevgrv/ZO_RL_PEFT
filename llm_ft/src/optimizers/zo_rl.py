@@ -18,7 +18,8 @@ class ZO_RL(ZeroOrderOptimizer):
             perturbation_mode: str = "two_side",
             k: Optional[int] = 10,
             variance: Optional[float] = 1e-3,
-            lr_mu: Optional[float] = None
+            lr_mu: Optional[float] = None,
+            mu0: bool = False,
     ):
         super().__init__(
             params=params,
@@ -33,21 +34,32 @@ class ZO_RL(ZeroOrderOptimizer):
         self.perturbation_mode = perturbation_mode 
         self.k = k
         self.variance = variance
-
-    @torch.no_grad()
-    def step(self, closure=None):
-        loss1, loss2 = None, None
-        self._prepare_parameters()
-
+        self.mu0 = mu0
         for group in self.param_groups:
             for param in group['params']:    
                 state = self.state[param]
                 if len(state) == 0:
                     state['step'] = 0
-                    state['mu'] = torch.zeros_like(
-                        param, 
-                        memory_format=torch.preserve_format
-                    )
+                    if param.requires_grad and self.mu0:
+                        if param.grad is None:
+                            raise ValueError("param.grad is None, but mu0 is True")
+                            
+                        state['mu'] = param.grad.clone()
+                        state['mu'] /= torch.linalg.norm(state['mu'])
+                    else:
+                        state['mu'] = torch.zeros_like(
+                            param, 
+                            memory_format=torch.preserve_format
+                        )
+
+    @torch.no_grad()
+    def step(self, closure=None):
+        loss1, loss2 = None, None
+        # self._prepare_parameters()
+
+        for group in self.param_groups:
+            for param in group['params']:    
+                state = self.state[param]
                 state['step'] += 1
 
         e_values = {}
@@ -57,8 +69,8 @@ class ZO_RL(ZeroOrderOptimizer):
             self.generator.manual_seed(self.zo_random_seed)
             for group in self.param_groups:
                 for p in group['params']:
-                    z = torch.normal(mean=self.state[p]["mu"], std=self.variance, generator=self.generator)
-                    # z /= torch.linalg.vector_norm(z)
+                    state = self.state[p]
+                    z = torch.normal(mean=state["mu"], std=self.variance, generator=self.generator)
                     perturb = z * self.zo_eps
                     perturb = perturb.to(p.device)
                     p.data.add_(perturb)
@@ -70,8 +82,8 @@ class ZO_RL(ZeroOrderOptimizer):
 
             for group in self.param_groups:
                 for p in group['params']:
-                    z = torch.normal(mean=self.state[p]["mu"], std=self.variance, generator=self.generator)
-                    # z /= torch.linalg.vector_norm(z)
+                    state = self.state[p]
+                    z = torch.normal(mean=state["mu"], std=self.variance, generator=self.generator)
                     perturb = z * self.zo_eps
                     perturb = perturb.to(p.device)
                     p.data.add_(-perturb)
@@ -85,8 +97,8 @@ class ZO_RL(ZeroOrderOptimizer):
 
         for group in self.param_groups:
             for p in group['params']:
-                z = torch.normal(mean=self.state[p]["mu"], std=self.variance, generator=self.generator)
-                # z /= torch.linalg.vector_norm(z)
+                state = self.state[p]
+                z = torch.normal(mean=state["mu"], std=self.variance, generator=self.generator)
                 perturb = z * self.zo_eps
                 perturb = perturb.to(p.device)
                 p.data.add_(-perturb)
@@ -97,8 +109,8 @@ class ZO_RL(ZeroOrderOptimizer):
 
         for group in self.param_groups:
             for p in group['params']:
-                z = torch.normal(mean=self.state[p]["mu"], std=self.variance, generator=self.generator)
-                # z /= torch.linalg.vector_norm(z)
+                state = self.state[p]
+                z = torch.normal(mean=state["mu"], std=self.variance, generator=self.generator)
                 perturb = z * self.zo_eps
                 perturb = perturb.to(p.device)
                 p.data.add_(perturb)
@@ -120,17 +132,15 @@ class ZO_RL(ZeroOrderOptimizer):
 
                 # OPTIMIZE X
                 z = torch.normal(mean=mu, std=self.variance, generator=self.generator)
-                # z /= torch.linalg.vector_norm(z)
                 g_x = projected_grad * z 
-                sign_g_x = torch.sign(g_x)
-                p.data.add_(sign_g_x, alpha=-self.lr)
+
+                p.data.add_(g_x, alpha=-self.lr)
                 
                 # OPTIMIZE MU
                 e_samples_list = []
                 for seed in seeds:
                     self.generator.manual_seed(seed)
                     z = torch.normal(mean=mu, std=self.variance, generator=self.generator)
-                    # z /= torch.linalg.vector_norm(z)
                     e_samples_list.append(z)
                 e_samples = torch.stack(e_samples_list, dim=0)  # shape (k, *p.shape)
                 
@@ -138,12 +148,12 @@ class ZO_RL(ZeroOrderOptimizer):
                 
                 # Broadcast coeff to (k, 1, 1, ...) matching e_samples dims
                 expanded_coeff = (coeff.view(self.k, *([1] * len(p.shape)))).to(p.device)
-                
                 term = expanded_coeff * mu_diff  # shape (k, *p.shape)
-                
                 sum_term = torch.sum(term, dim=0)  # shape (*p.shape)
                 
                 g_mu = -sum_term / (self.k * (self.variance ** 2))
-                self.state[p]["mu"].add_(g_mu, alpha=-self.lr_mu)
+
+                state["mu"].add_(g_mu, alpha=-self.lr_mu)
+                state['mu'] /= torch.linalg.norm(state['mu'])
 
         return loss1  
