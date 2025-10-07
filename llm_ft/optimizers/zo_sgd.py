@@ -13,7 +13,8 @@ class ZO_SGD(ZeroOrderOptimizer):
             eps: Optional[float] = None,
             momentum: float = None,
             weight_decay: float = 0.0,
-            vector_sampling_type: str = "standard_normal",
+            tensor_sampling_type: str = "standard_normal",
+            matrix_sampling_type: str = None, 
             perturbation_mode: str = "two_side",
     ):
         super().__init__(
@@ -21,17 +22,14 @@ class ZO_SGD(ZeroOrderOptimizer):
             lr=lr,
             eps=eps,
             momentum=momentum,
-            vector_sampling_type=vector_sampling_type,
+            tensor_sampling_type=tensor_sampling_type,
+            matrix_sampling_type=matrix_sampling_type,
             perturbation_mode=perturbation_mode,
         )
-
-        for group in self.param_groups:
-            group['vector_sampling_type'] = vector_sampling_type
         
     @torch.no_grad()
     def step(self, closure=None):
         loss1, loss2 = None, None 
-        self._prepare_parameters()
         
         self.zo_random_seed = np.random.randint(1_000_000_000)
         self.generator.manual_seed(self.zo_random_seed)
@@ -65,13 +63,15 @@ class ZO_SGD(ZeroOrderOptimizer):
             eps = group['eps']
             momentum = group['momentum']
             weight_decay = group['weight_decay']
+            
+
             for param in group['params']:
                 state = self.state[param]
                 if len(state) == 0:
                     state['step'] = 0
-                
+                tensor_sampling_type = state["tensor_sampling_type"]
                 device = param.device
-                z = self.vector_sampler.sample(param.shape, generator=self.generator).to(device)
+                z = self.tensor_sampler.sample(p.shape, generator=self.generator, sampler_type=tensor_sampling_type).to(device)
                 grad = (z * self.projected_grad) / eps        
 
                 grad.add_(param, alpha=weight_decay) # decay

@@ -2,21 +2,19 @@
 
 export CUDA_VISIBLE_DEVICES=0
 export WANDB_DISABLED="false"
-# export WANDB_PROJECT="zo-lib-run"       
-# export WANDB_ENTITY="andrey"   
+export WANDB_ENTITY="andrey"
 export WANDB_API_KEY=""
-export HF_TOKEN="" # for llama
+export HF_TOKEN="" 
 
 command="python run.py"
 
 # Model and Task Configuration
 command+=" --model_name=\"roberta-large\""
-# command+=" --lora" # type of Fine-Tuning 
+command+=" --lora" # type of Fine-Tuning 
 command+=" --task_name=\"SST2\""
 command+=" --trainer=\"zo_rl\""
 
 # Logging and Reporting
-# TODO: output_dir is constructed in Python using args.tag, do we need it? 
 command+=" --output_dir=\"result/SST2-FT-\$TAG\""
 command+=" --report_to=\"wandb\""
 command+=" --project_name=\"zo-rl\""
@@ -29,7 +27,7 @@ command+=" --load_best_model_at_end"
 command+=" --evaluation_strategy=\"steps\""
 command+=" --save_strategy=\"steps\""
 command+=" --save_total_limit=1"
-command+=" --eval_steps=1000"
+command+=" --eval_steps=500"
 command+=" --max_steps=20000"
 command+=" --save_steps=1000"
 
@@ -45,13 +43,13 @@ command+=" --perturbation_mode=\"two_side\""
 command+=" --zo_eps=1e-3"
 command+=" --momentum=0.0"
 command+=" --weight_decay=0.0"
-command+=" --module_wise_perturbation=False" # FIXME: what is it
+command+=" --module_wise_perturbation=False"
 
 # Miscellaneous
 command+=" --overwrite_output_dir"
 
 # Learning Rate Scheduler Settings
-# command+=" --lr_scheduler_type=\"constant\"" # FIXME: need to delete this 
+command+=" --learning_rate=5e-3"
 command+=" --scheduler=\"cosine\""
 command+=" --num_training_steps=20000"
 command+=" --warmup_steps=0"
@@ -59,24 +57,19 @@ command+=" --min_lr_ratio=0.1"
 command+=" --scheduler_cycle_length=1"
 
 # Sampling Methods
-command+=" --vector_sampling_type=\"standard_normal\""
+command+=" --tensor_sampling_type=\"standard_normal\""
 command+=" --matrix_sampling_type=\"Random_baseline\""
 
 # Jaguar-Specific Parameters
 command+=" --zo_tau=1e-3"
 command+=" --zo_beta=0.9"
-command+=" --zo_use_smoothing=true"
+# command+=" --zo_use_smoothing=true"
 
-# ZO RL-Specific Parameters
-command+=" --k_value=5"
+# Sparse Jaguar-Specific Parameters
+command+=" --params_ratio=0.1"
+
+command+=" --k_value=10"
 command+=" --variance=1e-1"
-# command+=" --lr_mu=5e-3"
-# command+=" --learning_rate=1e-2"
+command+=" --use_grad_first=False"
 
-# # Learning Rate Loop
-for learning_rate in 1e-3 5e-3 5e-4 1e-2; do
-    for lr_mu in 1e-2 5e-3 5e-2 1e-3; do
-        full_command="$command --learning_rate=$learning_rate --lr_mu=$lr_mu"
-        eval "$full_command"
-    done
-done
+eval "$command"

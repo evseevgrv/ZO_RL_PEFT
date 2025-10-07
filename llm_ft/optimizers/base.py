@@ -16,12 +16,12 @@ class ZeroOrderOptimizer(Optimizer, ABC):
             momentum: float = 0.0,
             weight_decay: float = 0.0,
             gradient_sparsity: Optional[Union[float, Dict[str, float]]] = None,
-            vector_sampling_type: str = "standard_normal",
-            matrix_sampling_type: str = None,
+            tensor_sampling_type: str = "standard_normal",
+            matrix_sampling_type: str = None, 
             perturbation_mode: str = "two_side",
             device: str = "cuda",
     ):
-        if lr is not None or eps is not None: # FIXME: looks strange 
+        if lr is not None or eps is not None: 
             defaults = {
                 'lr': lr,
                 'eps': eps,
@@ -40,45 +40,17 @@ class ZeroOrderOptimizer(Optimizer, ABC):
 
         self.generator = torch.Generator(device=device)
 
-        self.vector_sampler = VectorSampler(vector_sampling_type, device=device)
-        if matrix_sampling_type is not None:
-            self.matrix_sampler = MatrixSampler(matrix_sampling_type, device=device)
+        self.tensor_sampler = TensorSampler(tensor_sampling_type, device=device)
+
         self.perturbation_mode = perturbation_mode
 
-        self.named_parameters_all = []
-        for group_idx, group in enumerate(self.param_groups):
-            for param_idx, param in enumerate(group['params']):
-                self.device = param.device
-                param_name = f"group_{group_idx}.param_{param_idx}"
-                self.named_parameters_all.append((param_name, param))
-    
-        self.zo_eps = self._calculate_zo_eps(eps=eps)
-
-        self._inner_optimizers = None
-        self._lr_schedulers = None  
-
-    def _prepare_parameters(self) -> None:
-        """Prepares parameters for optimization. Common for all optimizer's steps"""
-        self.named_parameters_to_optim = [
-            (name, param) for name, param in self.named_parameters_all 
-            if param.requires_grad
-        ]
-        for _, param in self.named_parameters_to_optim:
-            param.grad = None
-
-    def _calculate_zo_eps(self, eps: Optional[float] = None):
-        """"Estimates zo_eps for accurate grad approx as a weighted sum of all epsilons"""
-        total_params = 0
-        eps_sum = 0.0
-        
         for group in self.param_groups:
-            group_eps = group['eps']
-            if group_eps is not None:
-                group_params = sum(p.numel() for p in group['params'] if p.requires_grad)
-                eps_sum += group_eps * group_params
-                total_params += group_params
-        
-        return eps_sum / total_params if total_params > 0 else (eps if eps is not None else 1e-3)
+            for p in group['params']:
+                if p.ndim == 1:
+                    self.state[p]['tensor_sampling_type'] = tensor_sampling_type
+                elif p.ndim >= 2:
+                     self.state[p]['tensor_sampling_type'] = matrix_sampling_type if matrix_sampling_type is not None else tensor_sampling_type
+
 
     def _validate_hyperparameters(self):
         """Obligatory hyperparameters check"""
@@ -106,8 +78,9 @@ class ZeroOrderOptimizer(Optimizer, ABC):
     ) -> None:
         for group in self.param_groups:
             eps = group["eps"]
+            tensor_sampling_type = group["tensor_sampling_type"]
             for p in group['params']:
-                z = self.vector_sampler.sample(p.shape, generator=self.generator)
+                z = self.tensor_sampler.sample(p.shape, generator=self.generator, sampler_type=tensor_sampling_type)
                 perturb = z * eps
                 p.data.add_(scaling_factor * perturb.to(p.device))
 
@@ -139,13 +112,15 @@ class ZeroOrderOptimizer(Optimizer, ABC):
         return (selected_rows, selected_cols)
     
     def _indices_perturb(self, scaling_factor = 1.0):
-        for name, param in self.named_parameters_to_optim:
-            indices = self._select_indices(param_shape=param.shape, device=param.device)
-            if isinstance(indices, torch.Tensor):
-                param.data[indices] += scaling_factor * self.zo_eps
-            else:
-                rows, cols = indices
-                param.data[rows[:, None], cols] += scaling_factor * self.zo_eps
+        for group in self.param_groups:
+            eps = group["eps"]
+            for p in group['params']:
+                indices = self._select_indices(param_shape=p.shape, device=p.device)
+                if isinstance(indices, torch.Tensor):
+                    p.data[indices] += scaling_factor * eps
+                else:
+                    rows, cols = indices
+                    p.data[rows[:, None], cols] += scaling_factor * eps
 
     def matrix_perturb_parameters(
         self, 
@@ -153,11 +128,9 @@ class ZeroOrderOptimizer(Optimizer, ABC):
     ) -> None:
         for group in self.param_groups:
             eps = group["eps"]
+            tensor_sampling_type = group["tensor_sampling_type"]
             for p in group['params']:
-                if len(p.shape) == 1:
-                    z = self.vector_sampler.sample(p.shape, generator=self.generator)
-                else:
-                    z = self.matrix_sampler.sample_single_matrix(p.shape, generator=self.generator)
+                z = self.tensor_sampler.sample(p.shape, generator=self.generator, sampler_type=tensor_sampling_type)
 
                 perturb = z * eps
                 p.data.add_(scaling_factor * perturb.to(p.device))

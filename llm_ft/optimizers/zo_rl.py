@@ -14,19 +14,19 @@ class ZO_RL(ZeroOrderOptimizer):
             eps: Optional[float] = None,
             momentum: float = 0.0,
             gradient_sparsity: Optional[Union[float, Dict[str, float]]] = None,
-            vector_sampling_type: str = "standard_normal",
+            tensor_sampling_type: str = "standard_normal",
             perturbation_mode: str = "two_side",
             k: Optional[int] = 10,
             variance: Optional[float] = 1e-3,
             lr_mu: Optional[float] = None,
-            mu0: bool = False,
+            use_grad_first: bool = False,
     ):
         super().__init__(
             params=params,
             lr=lr,
             eps=eps,
             momentum=momentum,
-            vector_sampling_type=vector_sampling_type,
+            tensor_sampling_type=tensor_sampling_type,
             gradient_sparsity=gradient_sparsity,
         )
         self.lr = lr 
@@ -34,15 +34,15 @@ class ZO_RL(ZeroOrderOptimizer):
         self.perturbation_mode = perturbation_mode 
         self.k = k
         self.variance = variance
-        self.mu0 = mu0
+        self.use_grad_first = use_grad_first
         for group in self.param_groups:
             for param in group['params']:    
                 state = self.state[param]
-                if len(state) == 0:
+                if 'step' not in state:
                     state['step'] = 0
-                    if param.requires_grad and self.mu0:
+                    if param.requires_grad and self.use_grad_first:
                         if param.grad is None:
-                            raise ValueError("param.grad is None, but mu0 is True")
+                            raise ValueError("param.grad is None, but use_grad_first is True")
                             
                         state['mu'] = param.grad.clone()
                         state['mu'] /= torch.linalg.norm(state['mu'])
@@ -55,7 +55,6 @@ class ZO_RL(ZeroOrderOptimizer):
     @torch.no_grad()
     def step(self, closure=None):
         loss1, loss2 = None, None
-        # self._prepare_parameters()
 
         for group in self.param_groups:
             for param in group['params']:    
@@ -68,12 +67,11 @@ class ZO_RL(ZeroOrderOptimizer):
             self.zo_random_seed = np.random.randint(1_000_000_000)
             self.generator.manual_seed(self.zo_random_seed)
             for group in self.param_groups:
+                eps = group['eps']
                 for p in group['params']:
                     state = self.state[p]
                     z = torch.normal(mean=state["mu"], std=self.variance, generator=self.generator)
-                    perturb = z * self.zo_eps
-                    perturb = perturb.to(p.device)
-                    p.data.add_(perturb)
+                    p.data.add_(z * eps)
 
             loss1 = closure()
             e_values[self.zo_random_seed] = loss1 
@@ -81,12 +79,11 @@ class ZO_RL(ZeroOrderOptimizer):
             self.generator.manual_seed(self.zo_random_seed)
 
             for group in self.param_groups:
+                eps = group['eps']
                 for p in group['params']:
                     state = self.state[p]
                     z = torch.normal(mean=state["mu"], std=self.variance, generator=self.generator)
-                    perturb = z * self.zo_eps
-                    perturb = perturb.to(p.device)
-                    p.data.add_(-perturb)
+                    p.data.add_(-z * eps)
         
         optimal_seed = min(e_values, key=e_values.get)
 
@@ -96,30 +93,28 @@ class ZO_RL(ZeroOrderOptimizer):
         self.generator.manual_seed(self.zo_random_seed)
 
         for group in self.param_groups:
+            eps = group['eps']
             for p in group['params']:
                 state = self.state[p]
                 z = torch.normal(mean=state["mu"], std=self.variance, generator=self.generator)
-                perturb = z * self.zo_eps
-                perturb = perturb.to(p.device)
-                p.data.add_(-perturb)
+                p.data.add_(-z * eps)
 
         loss2 = closure()
 
         self.generator.manual_seed(self.zo_random_seed)
 
         for group in self.param_groups:
+            eps = group['eps']
             for p in group['params']:
                 state = self.state[p]
                 z = torch.normal(mean=state["mu"], std=self.variance, generator=self.generator)
-                perturb = z * self.zo_eps
-                perturb = perturb.to(p.device)
-                p.data.add_(perturb)
+                p.data.add_(z * eps)
 
         projected_grad = self.grad_approx(loss_plus=loss1, loss_minus=loss2, perturbation_mode="two_side")
         self.generator.manual_seed(self.zo_random_seed)
 
         seeds = list(e_values.keys())
-        f_tensor = torch.tensor(list(e_values.values()), device=self.device)
+        f_tensor = torch.tensor(list(e_values.values()))
         f_sum = torch.sum(f_tensor)
         coeff = (f_tensor * self.k - f_sum) / (self.k - 1)
 

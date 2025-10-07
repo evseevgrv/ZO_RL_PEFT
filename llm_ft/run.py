@@ -135,10 +135,9 @@ class OurArguments(TrainingArguments):
 
     clean_model_at_end: bool = True  # remove everthing at the end.
 
-    # zo jaguar NEW
+    # Jaguar-Specific params
 
     zo_tau: float = 1e-6
-    zo_use_smoothing: bool = False
     zo_beta: float = 1e-4
 
     # sparse gradient pruning
@@ -161,18 +160,21 @@ class OurArguments(TrainingArguments):
     ## - mlp-attn: perturb one mlp/attention layer at a time
     ## - linear: perturb one linear layer at a time
     """
-    matrix_sampling_type: str = "Rotation"
-    vector_sampling_type: str = "standard_normal"
-    # report_to: str = "clearml"
+    tensor_sampling_type: str = "standard_normal"
+    matrix_sampling_type: str = None 
+
     scheduler: str = "constant"
     num_training_steps: int = 20000
     warmup_steps: int = 0
     min_lr_ratio: float = 0.1
     scheduler_cycle_length: int = 1
-    learning_rate: float
+
+    params_ratio: float = 0.1
+
     k_value: int = 10 
     variance: float = 1e-3
     lr_mu: float = None 
+    use_grad_first: bool = False
 
 
 def parse_args():
@@ -641,7 +643,7 @@ def main():
         args.mode = "prompt"
     else:
         args.mode = "ft"
-    args.tag = f"{args.trainer}-{args.task_name}-{args.template_ver}-{args.model_name.split('/')[-1]}-OPTIM_{args.mode}-STEP{args.max_steps}-{args.optimizer}-LR{args.learning_rate}-LR_MU{args.lr_mu}-{args.lr_scheduler_type}-ZOEPS{args.zo_eps}-Q{args.q}-MATRXSAMPLING{args.matrix_sampling_type}-VECTORSAMPLING{args.vector_sampling_type}"
+    args.tag = f"{args.trainer}-{args.task_name}-{args.template_ver}-{args.model_name.split('/')[-1]}-OPTIM_{args.mode}-STEP{args.max_steps}-{args.optimizer}-LR{args.learning_rate}-{args.scheduler}-ZOEPS{args.zo_eps}-Q{args.q}-MATRXSAMPLING{args.matrix_sampling_type}-TENSORSAMPLING{args.tensor_sampling_type}"
     args.tag = "momen" + args.tag if args.momentum > 0 else args.tag
     args.tag = f"sparse_grad-{args.gradient_sparsity}-{args.sparse_gradient_group}-{args.sparse_gradient_resample_steps}-" + args.tag if args.gradient_sparsity is not None else args.tag
     args.tag = f"module_perturb-{args.perturbed_module_level}-" + args.tag if args.module_wise_perturbation else args.tag

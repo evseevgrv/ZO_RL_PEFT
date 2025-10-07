@@ -12,15 +12,15 @@ class Jaguar_SignSGD(ZeroOrderOptimizer):
             beta: float = 0.9,
             lr: float = 0.01,
             eps: float = 1e-3,
-            vector_sampling_type: str = "standard_normal", 
-            matrix_sampling_type: str = None,  
+            tensor_sampling_type: str = "standard_normal", 
+            matrix_sampling_type: str = None, 
             perturbation_mode: str = "two_side"
     ):
         super().__init__(
             params,
             lr=lr,
             eps=eps,
-            vector_sampling_type=vector_sampling_type,
+            tensor_sampling_type=tensor_sampling_type,
             matrix_sampling_type=matrix_sampling_type,
             perturbation_mode=perturbation_mode,
         )
@@ -31,7 +31,6 @@ class Jaguar_SignSGD(ZeroOrderOptimizer):
     @torch.no_grad()
     def step(self, closure=None):
         loss1, loss2 = None, None 
-        self._prepare_parameters()  
 
         for group in self.param_groups:
             for param in group['params']:    
@@ -66,13 +65,13 @@ class Jaguar_SignSGD(ZeroOrderOptimizer):
             lr = group['lr']  
             beta = group['beta']
             eps = group['eps']
+            
             grad_final = grad_update / eps 
 
-            for param in group['params']:
-                if not any(name for name, p in self.named_parameters_to_optim if p is param):
-                    continue
-                state = self.state[param]
-                indices = self._select_indices(param_shape=param.shape, device=param.device)
+            for p in group['params']:
+                state = self.state[p]
+                tensor_sampling_type = state["tensor_sampling_type"]
+                indices = self._select_indices(p_shape=p.shape, device=p.device)
                 
                 if isinstance(indices, torch.Tensor):
                     state['grad_accum'][indices] = (
@@ -87,6 +86,6 @@ class Jaguar_SignSGD(ZeroOrderOptimizer):
                     )
                 
                 update_direction = torch.sign(state['grad_accum'])
-                param.data.add_(update_direction, alpha=-lr)
+                p.data.add_(update_direction, alpha=-lr)
                 
         return loss1

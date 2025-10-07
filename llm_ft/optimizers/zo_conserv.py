@@ -88,7 +88,6 @@ class ZO_Conserv(ZeroOrderOptimizer):
         loss0 = closure()
         
         self.zo_random_seed = np.random.randint(1000000000)
-        # FIXME: Don't see sense in self.zo_random_seed, it's easier to push this value directly to the function
         self.generator.manual_seed(self.zo_random_seed)
         
         self.zo_perturb_parameters(scaling_factor=1, random_seed=self.zo_random_seed)
