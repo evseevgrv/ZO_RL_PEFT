@@ -26,11 +26,9 @@ class Sparse_Jaguar_SignSGD(ZeroOrderOptimizer):
             perturbation_mode=perturbation_mode,
         )
 
-        self.params_ratio = params_ratio
-        
         for group in self.param_groups:
             group['beta'] = beta
-
+        self.params_ratio = params_ratio
         self.all_params = [p for group in self.param_groups for p in group['params']]
         total_params = sum(p.numel() for p in self.all_params)
         for group in self.param_groups:
@@ -42,7 +40,6 @@ class Sparse_Jaguar_SignSGD(ZeroOrderOptimizer):
                         param, 
                         memory_format=torch.preserve_format
                     )
-
     @torch.no_grad()
     def step(self, closure=None):
         loss1, loss2 = None, None 
@@ -55,17 +52,17 @@ class Sparse_Jaguar_SignSGD(ZeroOrderOptimizer):
         self.zo_random_seed = np.random.randint(1_000_000_000)
         self.generator.manual_seed(self.zo_random_seed)
 
-        self._sparse_indices_perturb(scaling_factor = 1.0, params_ratio = self.params_ratio, rows_ratio=self.rows_ratio, cols_ratio=self.columns_ratio)
+        self._sparse_indices_perturb(scaling_factor = 1.0, params_ratio = self.params_ratio)
         if closure is not None:
             loss1 = closure()
         self.generator.manual_seed(self.zo_random_seed)
 
-        self._sparse_indices_perturb(scaling_factor = -2.0, params_ratio = self.params_ratio, rows_ratio=self.rows_ratio, cols_ratio=self.columns_ratio)
+        self._sparse_indices_perturb(scaling_factor = -2.0, params_ratio = self.params_ratio)
         if closure is not None:
             loss2 = closure()
         self.generator.manual_seed(self.zo_random_seed)
 
-        self._sparse_indices_perturb(scaling_factor = 1.0, params_ratio = self.params_ratio, rows_ratio=self.rows_ratio, cols_ratio=self.columns_ratio)
+        self._sparse_indices_perturb(scaling_factor = 1.0, params_ratio = self.params_ratio)
         self.generator.manual_seed(self.zo_random_seed)
 
         grad_update = self.grad_approx(loss_plus=loss1, loss_minus=loss2, perturbation_mode="two_side")
@@ -94,7 +91,7 @@ class Sparse_Jaguar_SignSGD(ZeroOrderOptimizer):
 
         return loss1
     
-    def _sparse_indices_perturb(self, scaling_factor = 1.0, params_ratio = 0.1, rows_ratio = 1.0, cols_ratio = 1.0):
+    def _sparse_indices_perturb(self, scaling_factor = 1.0, params_ratio = 0.1):
         n = max(1, int(len(self.all_params) * params_ratio))
         param_indices =  torch.randperm(len(self.all_params), device=self.all_params[0].device, generator=self.generator)[:n]
         self.generator.manual_seed(self.zo_random_seed)

@@ -4,10 +4,10 @@ from functions import *
 from plot import CombinedPlotter
 
 if __name__ == "__main__":
-    d = 10**4
+    d = 2
     log_files = []
-    for gamma in [1e-5, 5e-5, 1e-4, 5e-4, 1e-3, 5e-3, 1e-2, 5e-2]:
-        for gamma_mu in [1e-4, 1e-3, 1e-2]:
+    for gamma in [1e-4]:
+        for gamma_mu in [1e-3]:
             for eps in [1e-3]:
                 print(f"RUN FOR gamma={gamma}, eps={eps}")
                 eps_scheduler = None
@@ -31,14 +31,14 @@ if __name__ == "__main__":
                 optimizer = ZORL_Optimizer(
                     f=rosenbrock_function,
                     eps=eps,
-                    tau=1e-2,
-                    K=10,
+                    tau=1e-1,
+                    K=5,
                     gamma=gamma,
-                    gamma_mu=1e-2,
+                    gamma_mu=gamma_mu,
                     beta=0.0,
                     x0=np.random.normal(
-                        loc=1, 
-                        scale=1, 
+                        loc=0, 
+                        scale=0.1, 
                         size=(d,)
                     ),
                     mu0=np.random.uniform(
@@ -46,13 +46,15 @@ if __name__ == "__main__":
                         high=1, 
                         size=(d,)
                     ),
+                    # mu0=None,
+                    init_mu_with_gradient=False,
                     d=d,
                     eps_scheduler=eps_scheduler
                 )
 
                 experiment = Experiment2d(
                     optimizer=optimizer,
-                    use_wandb=True,
+                    use_wandb=False,
                     plot_mu_vectors=False,
                     plot_e_vectors=False,
                     plot_gx_vectors=False,
@@ -60,13 +62,13 @@ if __name__ == "__main__":
                 )
 
                 experiment.run(
-                    num_steps=20000,
+                    num_steps=50000,
                     project_name="zo-rl-2d",
                     config={"function": "rosenbrock_function"}
                 )
 
-                # log_path = experiment.log_path 
-                # log_files.append(log_path)
+                log_path = experiment.log_path 
+                log_files.append(log_path)
 
 
                 # optimizer = ZOSGD_Optimizer(
@@ -112,6 +114,7 @@ if __name__ == "__main__":
                 #     eps_scheduler=eps_scheduler
                 # )
 
+
                 # experiment = Experiment2d(
                 #     optimizer=optimizer,
                 #     use_wandb=False,
@@ -137,19 +140,19 @@ if __name__ == "__main__":
                 # ]
                 
         
-                # plotter = CombinedPlotter(
-                #     log_files=log_files,
-                #     plot_mu_vectors=True,
-                #     plot_gx_vectors=False,
-                #     plot_contour=True,
-                #     f=rosenbrock_function,
-                #     function_name="rosenbrock_function",
-                #     mu_methods=["ZO_RL"],  
-                #     gx_methods=None,      
-                #     step_interval=1000
-                # )
+                plotter = CombinedPlotter(
+                    log_files=log_files,
+                    plot_mu_vectors=True,
+                    plot_gx_vectors=False,
+                    plot_contour=True,
+                    f=rosenbrock_function,
+                    function_name="rosenbrock_function",
+                    mu_methods=["ZO_RL"],  
+                    gx_methods=None,      
+                    step_interval=1000
+                )
                 
-                # plotter.plot(
-                #     output_path="experiment_2d/plots/combined_trajectory.pdf",
-                #     title="Comparison of Optimization Trajectories"
-                # )
+                plotter.plot(
+                    output_path="experiment_2d/plots/combined_trajectory.pdf",
+                    title="Comparison of Optimization Trajectories"
+                )

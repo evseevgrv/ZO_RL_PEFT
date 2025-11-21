@@ -1,4 +1,5 @@
 import numpy as np
+from autograd import grad
 from .utils import *
 from .base import BaseOptimizer
 
@@ -15,7 +16,8 @@ class ZORL_Optimizer(BaseOptimizer):
         x0=None, 
         mu0=None, 
         d=2,
-        eps_scheduler=None
+        eps_scheduler=None,
+        init_mu_with_gradient=True
     ):
         super().__init__(f, d)
         if K <= 1:
@@ -40,8 +42,23 @@ class ZORL_Optimizer(BaseOptimizer):
         self.beta = beta
         
         self.x = np.array(x0) if x0 is not None else np.array([1.0, 1.0])
+        print("x", self.x)
         self.v_x = np.zeros_like(self.x)
-        self.mu = np.array(mu0) if mu0 is not None else np.array([0.0, 0.0])
+        
+        if mu0 is not None:
+            self.mu = np.array(mu0)
+        elif init_mu_with_gradient:
+            self.mu = self._compute_true_gradient(self.x)
+            print("mu", self.mu)
+            # self.mu /= np.linalg.norm(self.mu)
+        else:
+            self.mu = np.zeros(self.d)
+
+    def _compute_true_gradient(self, x):
+        grad_f = grad(self.f)
+        gradient = grad_f(x)
+        print("gradient", gradient)
+        return gradient
 
     def step(self):
         # self.mu /= np.linalg.norm(self.mu)
@@ -56,26 +73,32 @@ class ZORL_Optimizer(BaseOptimizer):
         )
 
         e_norms = np.linalg.norm(e_samples, axis=1, keepdims=True)  
-        e_samples = e_samples / e_norms
+        e_samples_normalized = e_samples / e_norms
         
         f_vals = np.array([
             self.f(self.x + self.tau * e) for e in e_samples
         ])
-        
+
+        idx = np.argmin(f_vals)
+        e_argmin = e_samples[idx]
+        f_argmin = f_vals[idx]
+
+        g_x = (f_argmin - self.f(self.x - self.tau * e_argmin)) * e_argmin / (2 * self.tau)
+        # print(g_x)
         total_sum = np.sum(f_vals)
 
-        # term_i = (self.K * f_vals - total_sum) / self.K
-        term_x = (total_sum - f_vals) / total_sum
+        # # term_i = (self.K * f_vals - total_sum) / self.K
+        # term_x = (total_sum - f_vals) / total_sum
 
-        # f_current = self.f(self.x)
+        # # f_current = self.f(self.x)
 
-        # term_x = (f_vals - f_current) 
-        term_i = term_x
+        # # term_x = (f_vals - f_current) 
+        # term_i = term_x
         
-        g_x = np.sum(
-            term_i[:, np.newaxis] * e_samples, 
-            axis=0
-        ) / (self.tau * self.K)
+        # g_x = np.sum(
+        #     term_i[:, np.newaxis] * e_samples, 
+        #     axis=0
+        # ) / (self.tau * self.K)
 
         # print(g_x)
 
@@ -88,6 +111,7 @@ class ZORL_Optimizer(BaseOptimizer):
         # print(self.x, f_plus, f_minus, g_x)
         
         term_i = (self.K * f_vals - total_sum) / self.K
+        
         
         g_mu = np.sum(
             term_i[:, np.newaxis] * (self.mu - e_samples), 
@@ -106,5 +130,6 @@ class ZORL_Optimizer(BaseOptimizer):
             'f_value': self.f(self.x),
             'grad_x_norm': np.linalg.norm(g_x),
             'grad_mu_norm': np.linalg.norm(g_mu),
-            'grad_x': g_x.copy()
+            'grad_x': self.v_x.copy(),
+            'grad_mu': g_mu.copy()
         }

@@ -127,6 +127,9 @@ class Experiment2d:
                 if step % 1000 == 0:
                     x_str = ", ".join(f"{val:.4f}" for val in metrics['x'])
                     print(f"Step {step}: f(x) = {metrics['f_value']:.6f}, x = [{x_str}]")
+                    # print(f"Step {step}: mu = [{metrics['mu']}]")
+                    # print(f"Step {step}: g_x = [{metrics['grad_x']}]")
+                    # print(f"Step {step}: g_mu = [{metrics['grad_mu']}]")
 
         trajectory_x = np.array(trajectory_x)
         # trajectory_gx = np.array(trajectory_gx)

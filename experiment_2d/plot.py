@@ -68,7 +68,7 @@ class CombinedPlotter:
         self.default_color = 'gray'
         
         self.scale_factors = {
-            'mu': 0.01,
+            'mu': 0.1,
             'e': 1.0,
             'gx': 0.01
         }
@@ -357,7 +357,7 @@ class CombinedPlotter:
                 zorder=4
             )
             legend_elements.append(
-                Line2D([0], [0], marker='*', color='w', markerfacecolor='gold',
+                Line2D([1], [1], marker='*', color='w', markerfacecolor='gold',
                        markersize=12, markeredgecolor='black', label='Theoretical solution')
             )
         
