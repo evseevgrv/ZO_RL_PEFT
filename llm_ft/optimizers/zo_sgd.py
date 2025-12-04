@@ -71,7 +71,7 @@ class ZO_SGD(ZeroOrderOptimizer):
                     state['step'] = 0
                 tensor_sampling_type = state["tensor_sampling_type"]
                 device = param.device
-                z = self.tensor_sampler.sample(p.shape, generator=self.generator, sampler_type=tensor_sampling_type).to(device)
+                z = self.tensor_sampler.sample(param.shape, generator=self.generator, sampler_type=tensor_sampling_type).to(device)
                 grad = (z * self.projected_grad) / eps        
 
                 grad.add_(param, alpha=weight_decay) # decay

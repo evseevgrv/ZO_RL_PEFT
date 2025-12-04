@@ -7,7 +7,7 @@ export WANDB_API_KEY=""
 export HF_TOKEN=""
 
 # Список значений learning_rate для перебора
-learning_rates=("1e-3" "2e-3" "3e-3" "4e-3" "5e-3" "6e-3" "7e-3" "8e-3" "9e-3" "1e-2")
+learning_rates=("3e-4")
 
 for lr in "${learning_rates[@]}"; do
     # Формируем тег для output_dir и wandb (заменяем точку и 'e' на допустимые символы)
@@ -20,7 +20,7 @@ for lr in "${learning_rates[@]}"; do
     command+=" --model_name=\"roberta-large\""
     command+=" --lora"
     command+=" --task_name=\"SST2\""
-    command+=" --trainer=\"zo_sgd\""
+    command+=" --trainer=\"zo_rl\""
 
     # Logging and Reporting
     command+=" --output_dir=\"result/SST2-FT-${TAG}\""

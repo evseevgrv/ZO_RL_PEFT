@@ -4,7 +4,7 @@ import numpy as np
 from typing import Optional, Dict, Any, Union, Iterable
 import time
 import wandb
-
+import math
 from .opt_utils import *
 
 class ZO_RL(ZeroOrderOptimizer):
@@ -57,10 +57,15 @@ class ZO_RL(ZeroOrderOptimizer):
                             
                         state['mu'] = param.grad.clone()
                     else:
-                        state['mu'] = torch.zeros_like(
+                        state['mu'] = torch.randn_like(
                             param, 
                             memory_format=torch.preserve_format
                         )
+                        # state['mu'] /= torch.linalg.norm(state['mu'])
+                        # state['mu'] = torch.zeros_like(
+                        #     param, 
+                        #     memory_format=torch.preserve_format
+                        # )
 
     @torch.no_grad()
     def step(self, closure=None):
@@ -111,6 +116,7 @@ class ZO_RL(ZeroOrderOptimizer):
                     mu = state['mu']
                     device = param.device
                     # Sample z and save it (same z will be used for gradient accumulation)
+                    self.generator.manual_seed(self.zo_random_seed)
                     z = torch.normal(mean=mu, std=self.variance, generator=self.generator).to(device)
                     state['perturbation_z'] = z.clone()
         
@@ -142,6 +148,11 @@ class ZO_RL(ZeroOrderOptimizer):
             coeff = (f_tensor * self.k - f_sum) / (self.k - 1)
         else:
             coeff = torch.zeros_like(f_tensor)  # When k=1, mu update term is zero
+
+        
+        dot_product = 0 
+        old_mu_norms = 0
+        new_mu_norms = 0
         
         for group in self.param_groups:
             lr = group['lr']
@@ -157,6 +168,7 @@ class ZO_RL(ZeroOrderOptimizer):
                     mu = state['mu']
                     
                     # OPTIMIZE X - use the SAME z that was used for perturbation (like sparse_jaguar_signsgd)
+                    self.generator.manual_seed(self.zo_random_seed)
                     z = state['perturbation_z']  # Reuse the same z from perturbation
                     grad_final = z * projected_grad / eps
                     state['grad_accum'].mul_(beta).add_(grad_final, alpha=(1.0 - beta))
@@ -169,8 +181,12 @@ class ZO_RL(ZeroOrderOptimizer):
                         mu_diff += (mu - z) * coeff[i]
                     
                     g_mu = -mu_diff / (self.k * (self.variance ** 2))
-                    
+                    mu_old = state["mu"].detach().clone()
+                    old_mu_norms += torch.norm(mu_old).item()**2
                     state["mu"].add_(g_mu, alpha=-self.lr_mu)
+                    dot_product += torch.sum(mu_old * state["mu"]).item()
+                    new_mu_norms += torch.norm(state["mu"]).item()**2
+                    # state["mu"] /= torch.linalg.norm(state["mu"])
                 
                 # SignSGD update (for all parameters)
                 update_direction = torch.sign(state['grad_accum'])
@@ -189,6 +205,8 @@ class ZO_RL(ZeroOrderOptimizer):
             avg_mu_norm = sum(mu_norms) / len(mu_norms)
             wandb.log({"avg_mu_norm": avg_mu_norm})
 
+        mu_degree = dot_product / (math.sqrt(old_mu_norms) * math.sqrt(new_mu_norms))
+        wandb.log({"mu_degree": mu_degree})
         return loss1
     
     def _sparse_mu_perturb(self, scaling_factor=1.0, params_ratio=0.1):
@@ -211,6 +229,7 @@ class ZO_RL(ZeroOrderOptimizer):
                     device = param.device
                     
                     # Sample from normal distribution with mean=mu and std=variance
+                    self.generator.manual_seed(self.zo_random_seed)
                     z = torch.normal(mean=mu, std=self.variance, generator=self.generator).to(device)
                     param.data.add_(z * eps * scaling_factor)
     
@@ -227,4 +246,5 @@ class ZO_RL(ZeroOrderOptimizer):
                     state = self.state[param]
                     if 'perturbation_z' in state:
                         z = state['perturbation_z']
+                        self.generator.manual_seed(self.zo_random_seed)
                         param.data.add_(z * eps * scaling_factor)

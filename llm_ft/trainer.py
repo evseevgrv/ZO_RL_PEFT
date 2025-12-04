@@ -387,6 +387,31 @@ class OurTrainer(Trainer):
                 lr_mu=args.lr_mu, 
                 use_grad_first=args.use_grad_first
             )
+        elif args.trainer == "zo_rl_sgd":
+            if args.use_grad_first:
+                logger.info("Computing initial gradients for mu0 initialization")
+                first_batch = next(iter(train_dataloader))
+                first_batch = self._prepare_inputs(first_batch)
+                self.model.train()
+                with self.compute_loss_context_manager():
+                    loss = self.compute_loss(self.model, first_batch)
+                if self.args.n_gpu > 1:
+                    loss = loss.mean()
+                loss.backward()
+            self.optimizer = ZO_RL_SGD(
+                params=params, 
+                lr=args.learning_rate, 
+                eps=args.zo_eps, 
+                momentum=args.momentum,
+                weight_decay=args.weight_decay,
+                tensor_sampling_type=args.tensor_sampling_type,
+                matrix_sampling_type=args.matrix_sampling_type,
+                perturbation_mode=args.perturbation_mode,
+                k=args.k_value, 
+                variance=args.variance, 
+                lr_mu=args.lr_mu, 
+                use_grad_first=args.use_grad_first
+            )
         else:
             # assert args.lr_scheduler_type == 'constant', "we did not implement lr_schedule."
             if args.optimizer == "adam": # FIXME: what to do with this? 

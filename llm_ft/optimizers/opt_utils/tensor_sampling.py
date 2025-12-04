@@ -1,4 +1,6 @@
 import torch
+import math
+import numpy as np
 
 class TensorSampler:
     def __init__(self, sampler_type, p=2.0, device=None):
@@ -15,24 +17,28 @@ class TensorSampler:
         self.create_sampler(sampler_type)
 
     def create_sampler(self, sampler_type):
+        # Normalize the sampler_type string (strip whitespace)
+        if sampler_type is not None:
+            sampler_type = str(sampler_type).strip()
         self.sampler_type = sampler_type
+        
         if sampler_type == "standard_normal":
             self._sample_func = self._standard_normal
         elif sampler_type == "lp_sphere":
             self._sample_func = self._sample_lp_sphere
-        elif self.sampler_type == 'GS':                      
+        elif sampler_type == 'GS':                      
             self.sampler = self._GS_matrix
-        elif self.sampler_type == 'GS_v2':                 
+        elif sampler_type == 'GS_v2':                 
             self.sampler = self._GS_matrix_v2
-        elif self.sampler_type == 'Householder_reflection':
+        elif sampler_type == 'Householder_reflection':
             self.sampler = self._householder_matrix
-        elif self.sampler_type == 'Rotation':               
+        elif sampler_type == 'Rotation':               
             self.sampler = self._rotation_matrix
-        elif self.sampler_type == 'Reflection':            
+        elif sampler_type == 'Reflection':            
             self.sampler = self._reflection_matrix
-        elif self.sampler_type == 'Random_baseline':       
+        elif sampler_type == 'Random_baseline':       
             self.sampler = self._random_baseline
-        elif self.sampler_type == 'Torch_QR':       
+        elif sampler_type == 'Torch_QR':       
             self.sampler = self._torch_qr
         else:
             raise NotImplementedError(f"Sampling {sampler_type} is not implemented")

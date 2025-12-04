@@ -1,18 +1,18 @@
 #!/bin/bash
 
-export CUDA_VISIBLE_DEVICES=4,5
+export CUDA_VISIBLE_DEVICES=6
 export WANDB_DISABLED="false"
 export WANDB_ENTITY="andrey"
 export WANDB_API_KEY=""
 export HF_TOKEN=""
 
 # Список значений learning_rate для перебора
-learning_rates=("1e-3" "2e-3" "3e-3" "4e-3" "5e-3" "6e-3" "7e-3" "8e-3" "9e-3" "1e-2")
+learning_rates=("5e-3")
 
 for lr in "${learning_rates[@]}"; do
     # Формируем тег для output_dir и wandb (заменяем точку и 'e' на допустимые символы)
-    TAG="lr_${lr//./_}"        # Заменяем '.' на '_' (например: 1e-3 → lr_1e-3, 0.01 → lr_0_01)
-    TAG="${TAG//e/E}"          # Опционально: заменить 'e' на 'E' для читаемости
+    TAG="lr_${lr//./_}" 
+    TAG="${TAG//e/E}"
 
     command="python run.py"
 
@@ -20,7 +20,7 @@ for lr in "${learning_rates[@]}"; do
     command+=" --model_name=\"roberta-large\""
     command+=" --lora"
     command+=" --task_name=\"SST2\""
-    command+=" --trainer=\"zo_sgd\""
+    command+=" --trainer=\"zo_rl_sgd\""
 
     # Logging and Reporting
     command+=" --output_dir=\"result/SST2-FT-${TAG}\""
@@ -76,16 +76,11 @@ for lr in "${learning_rates[@]}"; do
     # Sparse Jaguar-Specific Parameters
     command+=" --params_ratio=0.1"
 
-    command+=" --lr_mu=1e-2"
-    command+=" --k_value=5"
+    command+=" --lr_mu=0"
+    command+=" --k_value=1"
     command+=" --variance=1"
     command+=" --use_grad_first=False"
 
     # Запуск команды
     eval "$command"
 done
-
-# 1. sparse signsgd tune 
-# - try use muon if bad 
-# 2. look up mu norm 
-# 3. params_ratio 
