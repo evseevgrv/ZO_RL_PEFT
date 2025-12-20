@@ -1,0 +1,15 @@
+ОЦЕНКА ЭКСПЕРИМЕНТОВ ЧЕРЕЗ LLM-AS-A-JUDGE
+--------------------------------------------------------------------------------
+    Отправка запроса к OpenRouter API (модель: openai/gpt-oss-120b:free)...
+    Получен ответ от API (длина: 184 символов)
+    Оценка успешно получена: 4
+    Отправка запроса к OpenRouter API (модель: openai/gpt-oss-120b:free)...
+    Получен ответ от API (длина: 0 символов)
+    Неожиданная ошибка: Could not parse JSON from response
+Traceback (most recent call last):
+  File "/tmp/ipykernel_474948/671825134.py", line 113, in evaluate_harmfulness_with_judge
+    raise ValueError("Could not parse JSON from response")
+ValueError: Could not parse JSON from response
+    Отправка запроса к OpenRouter API (модель: openai/gpt-oss-120b:free)...
+    Получен ответ от API (длина: 0 символов)
+    Неожиданная ошибка: Could not parse JSON from response

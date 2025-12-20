@@ -7,7 +7,7 @@ export WANDB_API_KEY=""
 export HF_TOKEN=""
 
 # Список значений learning_rate для перебора
-learning_rates=("2e-6")
+learning_rates=("3e-4")
 
 for lr in "${learning_rates[@]}"; do
     # Формируем тег для output_dir и wandb (заменяем точку и 'e' на допустимые символы)
@@ -17,8 +17,8 @@ for lr in "${learning_rates[@]}"; do
     command="python run.py"
 
     # Model and Task Configuration
-    command+=" --model_name=\"facebook/opt-1.3b\""
-    # command+=" --lora"
+    command+=" --model_name=\"roberta-large\""
+    command+=" --lora"
     command+=" --task_name=\"SST2\""
     command+=" --trainer=\"zo_rl\""
 
@@ -37,7 +37,7 @@ for lr in "${learning_rates[@]}"; do
     command+=" --save_strategy=\"steps\""
     command+=" --save_total_limit=1"
     command+=" --eval_steps=500"
-    command+=" --max_steps=20000"
+    command+=" --max_steps=6666"
     command+=" --save_steps=1000"
 
     # Dataset Settings
@@ -60,7 +60,7 @@ for lr in "${learning_rates[@]}"; do
     # Learning Rate Scheduler Settings
     command+=" --learning_rate=${lr}"
     command+=" --scheduler=\"cosine\""
-    command+=" --num_training_steps=20000"
+    command+=" --num_training_steps=6666"
     command+=" --warmup_steps=0"
     command+=" --min_lr_ratio=0.1"
     command+=" --scheduler_cycle_length=1"

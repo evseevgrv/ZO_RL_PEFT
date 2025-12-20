@@ -61,7 +61,9 @@ class ZO_RL(ZeroOrderOptimizer):
                             param, 
                             memory_format=torch.preserve_format
                         )
-                        # state['mu'] /= torch.linalg.norm(state['mu'])
+                        state['mu'] /= torch.linalg.norm(state['mu'])
+                        state['mu_old'] = state['mu'].detach().clone()
+                        state['mu_old_norm'] = torch.norm(state['mu_old']).item()**2
                         # state['mu'] = torch.zeros_like(
                         #     param, 
                         #     memory_format=torch.preserve_format
@@ -181,11 +183,10 @@ class ZO_RL(ZeroOrderOptimizer):
                         mu_diff += (mu - z) * coeff[i]
                     
                     g_mu = -mu_diff / (self.k * (self.variance ** 2))
-                    mu_old = state["mu"].detach().clone()
-                    old_mu_norms += torch.norm(mu_old).item()**2
                     state["mu"].add_(g_mu, alpha=-self.lr_mu)
-                    dot_product += torch.sum(mu_old * state["mu"]).item()
+                    dot_product += torch.sum(state['mu_old'] * state["mu"]).item()
                     new_mu_norms += torch.norm(state["mu"]).item()**2
+                    old_mu_norms += state['mu_old_norm']
                     # state["mu"] /= torch.linalg.norm(state["mu"])
                 
                 # SignSGD update (for all parameters)
@@ -205,7 +206,7 @@ class ZO_RL(ZeroOrderOptimizer):
             avg_mu_norm = sum(mu_norms) / len(mu_norms)
             wandb.log({"avg_mu_norm": avg_mu_norm})
 
-        mu_degree = dot_product / (math.sqrt(old_mu_norms) * math.sqrt(new_mu_norms))
+        mu_degree = dot_product / (math.sqrt(new_mu_norms) * math.sqrt(old_mu_norms))
         wandb.log({"mu_degree": mu_degree})
         return loss1
     

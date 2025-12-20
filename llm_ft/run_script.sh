@@ -1,13 +1,13 @@
 #!/bin/bash
 
-export CUDA_VISIBLE_DEVICES=4,5
+export CUDA_VISIBLE_DEVICES=0
 export WANDB_DISABLED="false"
 export WANDB_ENTITY="andrey"
 export WANDB_API_KEY=""
 export HF_TOKEN=""
 
 # Список значений learning_rate для перебора
-learning_rates=("1e-3" "2e-3" "3e-3" "4e-3" "5e-3" "6e-3" "7e-3" "8e-3" "9e-3" "1e-2")
+learning_rates=("1e-4" "5e-4" "1e-3" "5e-3" "1e-2" "5e-2")
 
 for lr in "${learning_rates[@]}"; do
     # Формируем тег для output_dir и wandb (заменяем точку и 'e' на допустимые символы)
@@ -50,7 +50,7 @@ for lr in "${learning_rates[@]}"; do
     # Training Hyperparameters
     command+=" --perturbation_mode=\"two_side\""
     command+=" --zo_eps=1e-3"
-    command+=" --momentum=0.0"
+    command+=" --momentum=0.9"
     command+=" --weight_decay=0.0"
     command+=" --module_wise_perturbation=False"
 

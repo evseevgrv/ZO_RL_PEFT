@@ -18,7 +18,7 @@ for lr in "${learning_rates[@]}"; do
 
     # Model and Task Configuration
     command+=" --model_name=\"facebook/opt-1.3b\""
-    # command+=" --lora"
+    command+=" --lora"
     command+=" --task_name=\"SST2\""
     command+=" --trainer=\"zo_sgd\""
 

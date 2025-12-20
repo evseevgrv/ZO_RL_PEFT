@@ -81,6 +81,7 @@ class ZeroOrderOptimizer(Optimizer, ABC):
             eps = group["eps"]
             for p in group['params']:
                 tensor_sampling_type = self.state[p]['tensor_sampling_type']
+                self.generator.manual_seed(self.zo_random_seed)
                 z = self.tensor_sampler.sample(p.shape, generator=self.generator, sampler_type=tensor_sampling_type)
                 perturb = z * eps
                 p.data.add_(scaling_factor * perturb.to(p.device))

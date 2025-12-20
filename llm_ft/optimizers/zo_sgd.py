@@ -34,49 +34,31 @@ class ZO_SGD(ZeroOrderOptimizer):
         self.zo_random_seed = np.random.randint(1_000_000_000)
         self.generator.manual_seed(self.zo_random_seed)
         
-        self.zo_perturb_parameters(scaling_factor=1)
+        self._mu_pertrub(scaling_factor=1)
         loss1 = closure()
         self.generator.manual_seed(self.zo_random_seed)
 
-        if self.perturbation_mode == "one_side":
-            self.zo_perturb_parameters(scaling_factor=-1)
-            self.generator.manual_seed(self.zo_random_seed)
-            loss2 = closure()
-            self.projected_grad = self.grad_approx(loss_plus=loss1, loss_minus=loss2, perturbation_mode="one_side")
-        else:
-            self.zo_perturb_parameters(scaling_factor=-2)
-            loss2 = closure()
-            self.projected_grad = self.grad_approx(loss_plus=loss1, loss_minus=loss2, perturbation_mode="two_side")
-            self.generator.manual_seed(self.zo_random_seed)
-            self.zo_perturb_parameters(scaling_factor=1)
-            self.generator.manual_seed(self.zo_random_seed)
-            
-        self._apply_gradients()
+        self._mu_pertrub(scaling_factor=-2)
+        loss2 = closure()
+        
+        self.projected_grad = self.grad_approx(loss_plus=loss1, loss_minus=loss2, perturbation_mode="two_side")
+
         self.generator.manual_seed(self.zo_random_seed)
-        return loss1 
-    
-    @torch.no_grad()
-    def _apply_gradients(self) -> None:
+        self._mu_pertrub(scaling_factor=1)       
+
         self.generator.manual_seed(self.zo_random_seed)
         for group_idx, group in enumerate(self.param_groups):
             lr = group['lr']
             eps = group['eps']
             momentum = group['momentum']
-            weight_decay = group['weight_decay']
             
-
             for param in group['params']:
                 state = self.state[param]
                 if len(state) == 0:
                     state['step'] = 0
-                tensor_sampling_type = state["tensor_sampling_type"]
                 device = param.device
-                z = self.tensor_sampler.sample(param.shape, generator=self.generator, sampler_type=tensor_sampling_type).to(device)
-                grad = (z * self.projected_grad) / eps        
-
-                grad.add_(param, alpha=weight_decay) # decay
-
-                # Apply momentum if applicable
+                z = torch.normal(mean=0, std=1, size=param.shape, device=param.device, generator=self.generator)
+                grad = (z * self.projected_grad) / eps
                 if momentum is not None and momentum != 0:
                     if 'momentum_buffer' not in state:
                         buf = state['momentum_buffer'] = torch.clone(grad).detach()
@@ -85,6 +67,17 @@ class ZO_SGD(ZeroOrderOptimizer):
                         buf.mul_(momentum).add_(grad)
                     update = buf
                 else:
-                    update = grad
-
+                    update = grad    
                 param.data.add_(update, alpha=-lr)
+
+        self.generator.manual_seed(self.zo_random_seed)
+        return loss1 
+    
+    def _mu_pertrub(self, scaling_factor: float = 1.0):
+        for group in self.param_groups:
+            eps = group['eps']
+            for param in group['params']:
+                state = self.state[param]
+                z = torch.normal(mean=0, std=1, size=param.shape, device=param.device, generator=self.generator)
+                param.data.add_(z * eps * scaling_factor)
+
