@@ -1,15 +1,15 @@
 #!/bin/bash
 
-export CUDA_VISIBLE_DEVICES=5
+export CUDA_VISIBLE_DEVICES=1
 export WANDB_DISABLED="false"
 export WANDB_ENTITY="andrey"
 export WANDB_API_KEY=""
 export HF_TOKEN=""
 
 # Список значений learning_rate для перебора
-learning_rates=("5e-4")
+mu_lr=("5e-2")
 
-for lr in "${learning_rates[@]}"; do
+for mu_lr in "${mu_lr[@]}"; do
     # Формируем тег для output_dir и wandb (заменяем точку и 'e' на допустимые символы)
     TAG="lr_${lr//./_}" 
     TAG="${TAG//e/E}"
@@ -58,7 +58,7 @@ for lr in "${learning_rates[@]}"; do
     command+=" --overwrite_output_dir"
 
     # Learning Rate Scheduler Settings
-    command+=" --learning_rate=${lr}"
+    command+=" --learning_rate=5e-4"
     command+=" --scheduler=\"cosine\""
     command+=" --num_training_steps=20000"
     command+=" --warmup_steps=0"
@@ -76,7 +76,7 @@ for lr in "${learning_rates[@]}"; do
     # Sparse Jaguar-Specific Parameters
     command+=" --params_ratio=0.1"
 
-    command+=" --lr_mu=1e-2"
+    command+=" --lr_mu=${mu_lr}"
     command+=" --k_value=5"
     command+=" --variance=1"
     command+=" --use_grad_first=False"

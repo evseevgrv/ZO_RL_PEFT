@@ -27,6 +27,7 @@ class ZO_RL_SGD(ZeroOrderOptimizer):
             lr=lr,
             eps=eps,
             momentum=momentum,
+            weight_decay=weight_decay,
             tensor_sampling_type=tensor_sampling_type,
             matrix_sampling_type=matrix_sampling_type,
             perturbation_mode=perturbation_mode,
@@ -58,14 +59,16 @@ class ZO_RL_SGD(ZeroOrderOptimizer):
                         state['mu'] /= torch.linalg.norm(state['mu'])
 
                         state['z'] = {}
-                        # state['mu'] = torch.zeros_like(
-                        #     param, 
-                        #     memory_format=torch.preserve_format
-                        # )
-                        
+                        state['mu'] = torch.zeros_like(
+                            param, 
+                            memory_format=torch.preserve_format
+                        )
+                        state['mu_old'] = state['mu'].detach().clone()
     @torch.no_grad()
     def step(self, closure=None):
         loss1, loss2 = None, None 
+        mu_norm_diff = None 
+        mu_grad_norm = None 
         
         for group in self.param_groups:
             for param in group['params']:    
@@ -75,32 +78,36 @@ class ZO_RL_SGD(ZeroOrderOptimizer):
                 state['perturbation_z'] = None
 
         if self.mu0:
-            self.zo_random_seed = np.random.randint(1_000_000_000)
-            self.generator.manual_seed(self.zo_random_seed)
-            self._zo_pertrub(scaling_factor=1.0)
+            for _ in range(20):
+                self.zo_random_seed = np.random.randint(1_000_000_000)
+                self.generator.manual_seed(self.zo_random_seed)
+                self._zo_pertrub(scaling_factor=1.0)
 
-            if closure is not None:
-                loss1 = closure()
-                        
-            self.generator.manual_seed(self.zo_random_seed)
-            self._zo_pertrub(scaling_factor=-2.0)
-                        
-            if closure is not None:
-                loss2 = closure()
-                        
-            self.generator.manual_seed(self.zo_random_seed)
-            self._zo_pertrub(scaling_factor=1.0)
+                if closure is not None:
+                    loss1 = closure()
+                            
+                self.generator.manual_seed(self.zo_random_seed)
+                self._zo_pertrub(scaling_factor=-2.0)
+                            
+                if closure is not None:
+                    loss2 = closure()
+                            
+                self.generator.manual_seed(self.zo_random_seed)
+                self._zo_pertrub(scaling_factor=1.0)
 
-            self.projected_grad = self.grad_approx(loss_plus=loss1, loss_minus=loss2, perturbation_mode="two_side")
-            self.generator.manual_seed(self.zo_random_seed)
+                self.projected_grad = self.grad_approx(loss_plus=loss1, loss_minus=loss2, perturbation_mode="two_side")
+                self.generator.manual_seed(self.zo_random_seed)
+                for group in self.param_groups:
+                    eps = group['eps']
+                    for param in group['params']:
+                        state = self.state[param]
+                        z = torch.normal(mean=0, std=1, size=param.shape, device=param.device, generator=self.generator)
+                        state['mu'] += self.projected_grad * z / eps
             for group in self.param_groups:
-                eps = group['eps']
                 for param in group['params']:
                     state = self.state[param]
-                    z = torch.normal(mean=0, std=1, size=param.shape, device=param.device, generator=self.generator)
-                    state['mu'] = self.projected_grad * z / eps
                     state['mu'] /= torch.linalg.norm(state['mu'])
-                    
+                    state['mu_old'] = state['mu'].detach().clone()
             self.mu0 = False
         
         loss_values = {}
@@ -175,6 +182,7 @@ class ZO_RL_SGD(ZeroOrderOptimizer):
             lr = group['lr']
             eps = group['eps']
             momentum = group['momentum']
+            weight_decay = group['weight_decay']
 
             for param in group['params']:
                 state = self.state[param]
@@ -184,6 +192,7 @@ class ZO_RL_SGD(ZeroOrderOptimizer):
                 mu = state['mu']
                 # z = torch.normal(mean=mu, std=self.variance, generator=self.generator)
                 z = state['z'][self.zo_random_seed]
+                # z /= torch.linalg.norm(z)
                 grad = (z * self.projected_grad) / eps    
                 if momentum is not None and momentum != 0:
                     if 'momentum_buffer' not in state:
@@ -193,6 +202,8 @@ class ZO_RL_SGD(ZeroOrderOptimizer):
                     update = state['momentum_buffer']
                 else:
                     update = grad    
+                if weight_decay is not None and weight_decay != 0:
+                    update.add_(param.data * weight_decay)
                 param.data.add_(update, alpha=-lr)
 
                 # OPTIMIZE MU
@@ -206,6 +217,19 @@ class ZO_RL_SGD(ZeroOrderOptimizer):
                     
                 g_mu = -mu_diff / (self.k * (self.variance ** 2))
                 state['mu'].add_(g_mu, alpha=-self.lr_mu)
+                # state['mu'] /= torch.linalg.norm(state['mu'])
+                if mu_norm_diff is None:
+                    mu_norm_diff = torch.linalg.norm(state['mu'] - state['mu_old'])**2 
+                else:
+                    mu_norm_diff += torch.linalg.norm(state['mu'] - state['mu_old'])**2 
+
+                if mu_grad_norm is None:
+                    mu_grad_norm = torch.linalg.norm(g_mu)**2 
+                else:
+                    mu_grad_norm += torch.linalg.norm(g_mu)**2 
+        mu_norm_diff = torch.sqrt(mu_norm_diff)
+        mu_grad_norm = torch.sqrt(mu_grad_norm)
+        wandb.log({"mu_norm_diff": mu_norm_diff, "mu_grad_norm": mu_grad_norm})       
 
 
          # Calculate and log average norm of mu across all parameters
@@ -234,7 +258,7 @@ class ZO_RL_SGD(ZeroOrderOptimizer):
                     state['z'][self.zo_random_seed] = z.clone()
                 else:
                     z = state['z'][self.zo_random_seed]
-
+                # z /= torch.linalg.norm(z)
                 param.data.add_(z * eps * scaling_factor)
 
     def _zo_pertrub(self, scaling_factor: float = 1.0):
