@@ -22,26 +22,32 @@ class ZO_SGD(ZeroOrderOptimizer):
             lr=lr,
             eps=eps,
             momentum=momentum,
+            weight_decay=weight_decay,
             tensor_sampling_type=tensor_sampling_type,
             matrix_sampling_type=matrix_sampling_type,
             perturbation_mode=perturbation_mode,
         )
+
+        for group in self.param_groups:
+            for param in group['params']:
+                state = self.state[param]
+                state['step'] = 0
         
     @torch.no_grad()
     def step(self, closure=None):
         loss1, loss2 = None, None 
         
         self.zo_random_seed = np.random.randint(1_000_000_000)
+
         self.generator.manual_seed(self.zo_random_seed)
-        
         self._mu_pertrub(scaling_factor=1)
         loss1 = closure()
-        self.generator.manual_seed(self.zo_random_seed)
 
+        self.generator.manual_seed(self.zo_random_seed)
         self._mu_pertrub(scaling_factor=-2)
         loss2 = closure()
         
-        self.projected_grad = self.grad_approx(loss_plus=loss1, loss_minus=loss2, perturbation_mode="two_side")
+        self.projected_grad = (loss1 - loss2) / 2
 
         self.generator.manual_seed(self.zo_random_seed)
         self._mu_pertrub(scaling_factor=1)       
@@ -54,9 +60,8 @@ class ZO_SGD(ZeroOrderOptimizer):
             
             for param in group['params']:
                 state = self.state[param]
-                if len(state) == 0:
-                    state['step'] = 0
-                device = param.device
+                state['step'] += 1
+
                 z = torch.normal(mean=0, std=1, size=param.shape, device=param.device, generator=self.generator)
                 grad = (z * self.projected_grad) / eps
                 if momentum is not None and momentum != 0:
@@ -69,8 +74,7 @@ class ZO_SGD(ZeroOrderOptimizer):
                 else:
                     update = grad    
                 param.data.add_(update, alpha=-lr)
-
-        self.generator.manual_seed(self.zo_random_seed)
+                
         return loss1 
     
     def _mu_pertrub(self, scaling_factor: float = 1.0):

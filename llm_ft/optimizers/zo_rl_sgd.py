@@ -17,8 +17,8 @@ class ZO_RL_SGD(ZeroOrderOptimizer):
             tensor_sampling_type: str = "standard_normal",
             matrix_sampling_type: str = None, 
             perturbation_mode: str = "two_side",
-            k: Optional[int] = 10,
-            variance: Optional[float] = 1e-3,
+            k: int = 10,
+            variance: float = 1.0,
             lr_mu: Optional[float] = None,
             use_grad_first: bool = False,
     ):
@@ -32,131 +32,58 @@ class ZO_RL_SGD(ZeroOrderOptimizer):
             matrix_sampling_type=matrix_sampling_type,
             perturbation_mode=perturbation_mode,
         )
-        # if torch.cuda.is_available():
-        #     self.generator = torch.Generator(device='cuda')
-        # else:
-        #     self.generator = torch.Generator(device='cpu')
         self.k = k
         self.variance = variance
         self.lr_mu = lr_mu if lr_mu is not None else lr
         self.use_grad_first = use_grad_first
-        self.mu0 = True
+        
         for group in self.param_groups:
-            for param in group['params']:    
+            for param in group['params']:
                 state = self.state[param]
-                if 'step' not in state:
-                    state['step'] = 0
-                    if param.requires_grad and self.use_grad_first:
-                        if param.grad is None:
-                            raise ValueError("param.grad is None, but use_grad_first is True")
-                            
-                        state['mu'] = param.grad.clone()
-                    else:
-                        state['mu'] = torch.randn_like( # N(0,1)
-                            param, 
-                            memory_format=torch.preserve_format
-                        )
-                        state['mu'] /= torch.linalg.norm(state['mu'])
+                state['step'] = 0
 
-                        state['z'] = {}
-                        state['mu'] = torch.zeros_like(
-                            param, 
-                            memory_format=torch.preserve_format
-                        )
-                        state['mu_old'] = state['mu'].detach().clone()
+                state['mu'] = torch.zeros_like(
+                    param, 
+                    memory_format=torch.preserve_format
+                )
+                # state['mu'] = torch.randn_like(
+                #     param, 
+                #     memory_format=torch.preserve_format
+                # )
+                # state['mu'] /= torch.linalg.norm(state['mu'])
+                state['mu_old'] = state['mu'].detach().clone()
+                state['mu_old_norm'] = torch.norm(state['mu_old']).item()**2
+
+        
     @torch.no_grad()
     def step(self, closure=None):
         loss1, loss2 = None, None 
-        mu_norm_diff = None 
-        mu_grad_norm = None 
-        
-        for group in self.param_groups:
-            for param in group['params']:    
-                state = self.state[param]
-                state['step'] += 1
-                state['z'] = {}
-                state['perturbation_z'] = None
-
-        if self.mu0:
-            for _ in range(20):
-                self.zo_random_seed = np.random.randint(1_000_000_000)
-                self.generator.manual_seed(self.zo_random_seed)
-                self._zo_pertrub(scaling_factor=1.0)
-
-                if closure is not None:
-                    loss1 = closure()
-                            
-                self.generator.manual_seed(self.zo_random_seed)
-                self._zo_pertrub(scaling_factor=-2.0)
-                            
-                if closure is not None:
-                    loss2 = closure()
-                            
-                self.generator.manual_seed(self.zo_random_seed)
-                self._zo_pertrub(scaling_factor=1.0)
-
-                self.projected_grad = self.grad_approx(loss_plus=loss1, loss_minus=loss2, perturbation_mode="two_side")
-                self.generator.manual_seed(self.zo_random_seed)
-                for group in self.param_groups:
-                    eps = group['eps']
-                    for param in group['params']:
-                        state = self.state[param]
-                        z = torch.normal(mean=0, std=1, size=param.shape, device=param.device, generator=self.generator)
-                        state['mu'] += self.projected_grad * z / eps
-            for group in self.param_groups:
-                for param in group['params']:
-                    state = self.state[param]
-                    state['mu'] /= torch.linalg.norm(state['mu'])
-                    state['mu_old'] = state['mu'].detach().clone()
-            self.mu0 = False
-        
         loss_values = {}
-       
         for _ in range(self.k):
             self.zo_random_seed = np.random.randint(1_000_000_000)
-
             self.generator.manual_seed(self.zo_random_seed)
-            self._mu_pertrub(scaling_factor=1.0)
-            
+            self._mu_pertrub(scaling_factor=1)
             if closure is not None:
                 loss = closure()
                 loss_values[self.zo_random_seed] = loss
-            
             self.generator.manual_seed(self.zo_random_seed)
-            self._mu_pertrub(scaling_factor=-1.0)
-
+            self._mu_pertrub(scaling_factor=-1)
+        
         optimal_seed = min(loss_values, key=loss_values.get)
         self.zo_random_seed = optimal_seed
-        # self.generator.manual_seed(self.zo_random_seed)
-
-        # for group_idx, group in enumerate(self.param_groups):
-        #     lr = group['lr']
-        #     eps = group['eps']
-
-        #     for param in group['params']:
-        #         state = self.state[param]
-        #         mu = state['mu']
-        #         state['perturbation_z'] = torch.normal(mean=mu, std=self.variance, generator=self.generator).to(param.device)
+        
+        # self.zo_random_seed = np.random.randint(1_000_000_000)
 
         self.generator.manual_seed(self.zo_random_seed)
-        self._mu_pertrub(scaling_factor=1.0)
-        
-        if closure is not None:
-            loss1 = closure()
-        
+        self._mu_pertrub(scaling_factor=1)
+        loss1 = closure()
+
         self.generator.manual_seed(self.zo_random_seed)
-        self._mu_pertrub(scaling_factor=-2.0)
+        self._mu_pertrub(scaling_factor=-2)
+        loss2 = closure()
         
-        if closure is not None:
-            loss2 = closure()
-        
-        self.generator.manual_seed(self.zo_random_seed)
-        self._mu_pertrub(scaling_factor=1.0)
-        
-        # Step 4: Compute gradient approximation
-        self.projected_grad = self.grad_approx(loss_plus=loss1, loss_minus=loss2, perturbation_mode="two_side")
-        
-        # Step 5: Update both x and mu
+        self.projected_grad = (loss1 - loss2) / 2
+
         seeds = list(loss_values.keys())
         f_tensor = torch.tensor(list(loss_values.values()))
         f_sum = torch.sum(f_tensor)
@@ -166,73 +93,61 @@ class ZO_RL_SGD(ZeroOrderOptimizer):
         else:
             coeff = torch.zeros_like(f_tensor)  # When k=1, mu update term is zero
 
-        # self.generator.manual_seed(self.zo_random_seed)
-        # self._mu_pertrub(scaling_factor=-1.0)
 
-        # if closure is not None:
-        #     loss2 = closure()
-
-        # self.projected_grad = self.grad_approx(loss_plus=loss1, loss_minus=loss2, perturbation_mode="two_side") 
-
-        # self.generator.manual_seed(self.zo_random_seed)
-        # self._mu_pertrub(scaling_factor=1.0)
+        # Restore parameters to original state (undo perturbations)
+        self.generator.manual_seed(self.zo_random_seed)
+        self._mu_pertrub(scaling_factor=1)
 
         self.generator.manual_seed(self.zo_random_seed)
         for group_idx, group in enumerate(self.param_groups):
             lr = group['lr']
             eps = group['eps']
             momentum = group['momentum']
-            weight_decay = group['weight_decay']
-
+            
             for param in group['params']:
                 state = self.state[param]
-                if len(state) == 0:
-                    state['step'] = 0
+                state['step'] += 1
                 device = param.device
+
                 mu = state['mu']
-                # z = torch.normal(mean=mu, std=self.variance, generator=self.generator)
-                z = state['z'][self.zo_random_seed]
-                # z /= torch.linalg.norm(z)
-                grad = (z * self.projected_grad) / eps    
+                z = torch.normal(mean=mu, std=self.variance, generator=self.generator).to(device)
+                grad = (z * self.projected_grad) / eps
                 if momentum is not None and momentum != 0:
                     if 'momentum_buffer' not in state:
-                        state['momentum_buffer'] = torch.clone(grad).detach()
+                        buf = state['momentum_buffer'] = torch.clone(grad).detach()
                     else:
-                        state['momentum_buffer'].mul_(momentum).add_(grad)
-                    update = state['momentum_buffer']
+                        buf = state['momentum_buffer']
+                        buf.mul_(momentum).add_(grad)
+                    update = buf
                 else:
                     update = grad    
-                if weight_decay is not None and weight_decay != 0:
-                    update.add_(param.data * weight_decay)
                 param.data.add_(update, alpha=-lr)
-
-                # OPTIMIZE MU
+        mu_norm_diff = None
+        mu_grad_norm = None
+        self.generator.manual_seed(self.zo_random_seed)
+        for group in self.param_groups:
+            eps = group['eps']
+            lr = group['lr']
+            for p in group['params']:    
+                state = self.state[p]
+                mu = state['mu']
+                device = p.device
                 mu_diff = torch.zeros_like(mu).to(device)
-                for i, seed in enumerate(seeds):
-                    # z = torch.normal(mean=mu, std=self.variance, generator=self.generator)
-                    z = state['z'][seed]
-                    # self.generator.manual_seed(seed)
-                    # z = torch.normal(mean=mu, std=self.variance, generator=self.generator).to(device)
+                for i, seed in enumerate(loss_values.keys()):
+                    # Use the same z that was used during perturbation (saved in state['z'][seed])
+                    z = torch.normal(mean=mu, std=self.variance, generator=self.generator).to(device)
                     mu_diff += (mu - z) * coeff[i]
                     
                 g_mu = -mu_diff / (self.k * (self.variance ** 2))
                 state['mu'].add_(g_mu, alpha=-self.lr_mu)
-                # state['mu'] /= torch.linalg.norm(state['mu'])
                 if mu_norm_diff is None:
                     mu_norm_diff = torch.linalg.norm(state['mu'] - state['mu_old'])**2 
                 else:
                     mu_norm_diff += torch.linalg.norm(state['mu'] - state['mu_old'])**2 
-
                 if mu_grad_norm is None:
                     mu_grad_norm = torch.linalg.norm(g_mu)**2 
                 else:
                     mu_grad_norm += torch.linalg.norm(g_mu)**2 
-        mu_norm_diff = torch.sqrt(mu_norm_diff)
-        mu_grad_norm = torch.sqrt(mu_grad_norm)
-        wandb.log({"mu_norm_diff": mu_norm_diff, "mu_grad_norm": mu_grad_norm})       
-
-
-         # Calculate and log average norm of mu across all parameters
         mu_norms = []
         for group in self.param_groups:
             for param in group['params']:
@@ -241,45 +156,57 @@ class ZO_RL_SGD(ZeroOrderOptimizer):
                     mu_norm = torch.norm(state['mu']).item()
                     mu_norms.append(mu_norm)
         
+        # Get step from first parameter
+        step = None
+        try:
+            first_param = list(self.param_groups[0]['params'])[0]
+            step = self.state[first_param].get('step', None)
+        except (KeyError, IndexError, AttributeError):
+            pass
+        
         if mu_norms:
             avg_mu_norm = sum(mu_norms) / len(mu_norms)
-            wandb.log({"avg_mu_norm": avg_mu_norm})
+            if wandb.run is not None:
+                wandb.log({"avg_mu_norm": avg_mu_norm})
+            # Log to file if enabled
+            try:
+                from trainer import _optimizer_log_func
+                if _optimizer_log_func is not None and step is not None:
+                    _optimizer_log_func({"avg_mu_norm": avg_mu_norm}, step=step)
+            except (ImportError, AttributeError):
+                pass
         self.generator.manual_seed(self.zo_random_seed)
-        return loss1     
+        
+        avg_mu_norm_diff = torch.sqrt(mu_norm_diff) / len(mu_norms)
+        avg_mu_grad_norm = torch.sqrt(mu_grad_norm) / len(mu_norms)
+        # Convert tensors to Python numbers
+        avg_mu_norm_diff_val = avg_mu_norm_diff.item() if torch.is_tensor(avg_mu_norm_diff) else float(avg_mu_norm_diff)
+        avg_mu_grad_norm_val = avg_mu_grad_norm.item() if torch.is_tensor(avg_mu_grad_norm) else float(avg_mu_grad_norm)
+        if wandb.run is not None:
+            wandb.log({"avg_mu_norm_diff": avg_mu_norm_diff_val, "avg_mu_grad_norm": avg_mu_grad_norm_val})
+        # Log to file if enabled
+        try:
+            from trainer import _optimizer_log_func
+            if _optimizer_log_func is not None and step is not None:
+                _optimizer_log_func({"avg_mu_norm_diff": avg_mu_norm_diff_val, "avg_mu_grad_norm": avg_mu_grad_norm_val}, step=step)
+        except (ImportError, AttributeError):
+            pass       
 
+        return loss1
+    
     def _mu_pertrub(self, scaling_factor: float = 1.0):
         for group in self.param_groups:
             eps = group['eps']
             for param in group['params']:
+                # Use the generator directly without resetting seed per parameter
+                # This ensures all parameters use the same random sequence
+                # self.generator.manual_seed(self.zo_random_seed)' 
                 state = self.state[param]
-                mu = state['mu']
-                if self.zo_random_seed not in state['z']:
-                    z = torch.normal(mean=mu, std=self.variance, generator=self.generator).to(param.device)
-                    state['z'][self.zo_random_seed] = z.clone()
-                else:
-                    z = state['z'][self.zo_random_seed]
-                # z /= torch.linalg.norm(z)
+                # if 'seed' not in state:
+                #     state['seed'] = np.random.randint(1_000_000_000)
+                # seed = state['seed'] 
+                # self.generator.manual_seed(seed)
+                mu = state['mu']    
+                device = param.device
+                z = torch.normal(mean=mu, std=self.variance, generator=self.generator).to(device)
                 param.data.add_(z * eps * scaling_factor)
-
-    def _zo_pertrub(self, scaling_factor: float = 1.0):
-        for group in self.param_groups:
-            eps = group['eps']
-            for param in group['params']:
-                state = self.state[param]
-                z = torch.normal(mean=0, std=1, size=param.shape, device=param.device, generator=self.generator)
-          
-                param.data.add_(z * eps * scaling_factor)
-                
-    # def _sparse_mu_perturb_with_saved_z(self, scaling_factor=1.0, selected_param_ids=None):
-    #     """
-    #     Sparse perturbation using pre-saved z values (for two-sided finite difference).
-    #     This ensures the same z is used for perturbation and gradient accumulation.
-    #     """
-    #     for group in self.param_groups:
-    #         eps = group['eps']
-    #         for param in group['params']:
-    #             state = self.state[param]
-    #             # if 'perturbation_z' in state:
-    #             if 'z' in state:
-    #                 z = state['z'][self.zo_random_seed]
-    #                 param.data.add_(z * eps * scaling_factor)

@@ -31,6 +31,116 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+# Global variable to store log directory for file logging
+_file_log_dir = None
+_file_log_enabled = False
+_metrics_history = {}  # Store history of metrics: {metric_name: [(step, value), ...]}
+
+def init_file_logging(log_dir, run_tag):
+    """Initialize file logging directory for a specific run"""
+    global _file_log_dir, _file_log_enabled, _metrics_history
+    # Create run-specific directory: logs/{run_tag}/
+    _file_log_dir = os.path.join(log_dir, run_tag)
+    _file_log_enabled = True
+    _metrics_history = {}
+    os.makedirs(_file_log_dir, exist_ok=True)
+    logger.info(f"File logging enabled. Logs will be written to: {_file_log_dir}")
+
+def _update_metrics_history(metrics_dict, step):
+    """Update the history of metrics"""
+    global _metrics_history
+    for metric_name, metric_value in metrics_dict.items():
+        if metric_name not in _metrics_history:
+            _metrics_history[metric_name] = []
+        if step is not None:
+            _metrics_history[metric_name].append((step, metric_value))
+        else:
+            # If no step, use index as step
+            _metrics_history[metric_name].append((len(_metrics_history[metric_name]), metric_value))
+
+def _create_plot(metric_name, history, output_path):
+    """Create and save a plot for a metric"""
+    try:
+        import matplotlib
+        matplotlib.use('Agg')  # Use non-interactive backend
+        import matplotlib.pyplot as plt
+        
+        if not history:
+            return
+        
+        steps, values = zip(*history)
+        
+        plt.figure(figsize=(10, 6))
+        plt.plot(steps, values, marker='o', markersize=3, linewidth=1.5)
+        plt.xlabel('Step', fontsize=12)
+        plt.ylabel(metric_name, fontsize=12)
+        plt.title(f'{metric_name} over Training Steps', fontsize=14, fontweight='bold')
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        
+        # Save plot (overwrite existing)
+        plt.savefig(output_path, dpi=150, bbox_inches='tight')
+        plt.close()
+    except ImportError:
+        logger.warning("matplotlib not available, skipping plot creation")
+    except Exception as e:
+        logger.warning(f"Failed to create plot for {metric_name}: {e}")
+
+def _convert_to_python_types(value):
+    """Convert PyTorch tensors and numpy arrays to Python native types"""
+    import torch
+    import numpy as np
+    if torch.is_tensor(value):
+        return value.item()
+    elif isinstance(value, np.ndarray):
+        return value.item() if value.size == 1 else value.tolist()
+    elif isinstance(value, (np.integer, np.floating)):
+        return value.item()
+    return value
+
+def log_to_file(metrics_dict, step=None, prefix=""):
+    """Write metrics to local .txt files and update plots"""
+    global _file_log_dir, _file_log_enabled, _metrics_history
+    if not _file_log_enabled or _file_log_dir is None:
+        return
+    
+    import json
+    from datetime import datetime
+    
+    # Convert all values to Python native types
+    metrics_dict = {k: _convert_to_python_types(v) for k, v in metrics_dict.items()}
+    
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    # Update metrics history
+    _update_metrics_history(metrics_dict, step)
+    
+    # Write to a main log file
+    main_log_file = os.path.join(_file_log_dir, "training_log.txt")
+    with open(main_log_file, "a", encoding="utf-8") as f:
+        log_entry = {
+            "timestamp": timestamp,
+            "step": step,
+            "prefix": prefix,
+            "metrics": metrics_dict
+        }
+        f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
+    
+    # Write individual metric files and create/update plots
+    for metric_name, metric_value in metrics_dict.items():
+        # Write metric file
+        metric_file = os.path.join(_file_log_dir, f"{metric_name}.txt")
+        with open(metric_file, "a", encoding="utf-8") as f:
+            if step is not None:
+                f.write(f"{step}\t{metric_value}\n")
+            else:
+                f.write(f"{timestamp}\t{metric_value}\n")
+        
+        # Create/update plot for this metric
+        if metric_name in _metrics_history:
+            plot_path = os.path.join(_file_log_dir, f"{metric_name}.png")
+            _create_plot(metric_name, _metrics_history[metric_name], plot_path)
+
 AutoConfig.register("mistral", MistralConfig)
 AutoModelForCausalLM.register(MistralConfig, MistralForCausalLM)
 
@@ -140,6 +250,9 @@ class OurArguments(TrainingArguments):
     zo_tau: float = 1e-6
     zo_beta: float = 1e-4
 
+    beta1: float = 0.9
+    beta2: float = 0.999
+
     # sparse gradient pruning
     gradient_sparsity: float = None
     sparse_gradient_resample_steps: int = 1
@@ -175,6 +288,13 @@ class OurArguments(TrainingArguments):
     variance: float = 1e-3
     lr_mu: float = None 
     use_grad_first: bool = False
+
+    # Local file logging
+    log_to_file: bool = False  # whether to write training logs to local .txt files
+    log_dir: str = None  # directory for log files; if None, will use "logs" (standalone folder)
+    
+    # Wandb logging
+    use_wandb: bool = True  # whether to use wandb for logging (use --no_use_wandb to disable)
 
 
 def parse_args():
@@ -647,7 +767,7 @@ def main():
     # Only auto-generate tag if not provided (empty string)
     if not args.tag:
         args.tag = f"{args.trainer}-{args.task_name}-{args.template_ver}-{args.model_name.split('/')[-1]}-OPTIM_{args.mode}-STEP{args.max_steps}-{args.optimizer}-LR{args.learning_rate}-{args.scheduler}-ZOEPS{args.zo_eps}-Q{args.q}-MATRXSAMPLING{args.matrix_sampling_type}-TENSORSAMPLING{args.tensor_sampling_type}"
-        if args.trainer == "zo_rl" or args.trainer == "zo_rl_sgd":
+        if args.trainer == "zo_rl" or args.trainer == "zo_rl_sgd" or args.trainer == "zo_rl_adamm":
             args.tag = f"{args.trainer}-{args.task_name}-LR{args.learning_rate}-LR_mu{args.lr_mu}-K{args.k_value}-VAR{args.variance}-USE_GRAD_FIRST{args.use_grad_first}-{args.tag}-NUM_TRAIN{args.num_train}"
         args.tag = "momen" + args.tag if args.momentum > 0 else args.tag
         args.tag = f"sparse_grad-{args.gradient_sparsity}-{args.sparse_gradient_group}-{args.sparse_gradient_resample_steps}-" + args.tag if args.gradient_sparsity is not None else args.tag
@@ -660,7 +780,15 @@ def main():
     args.logging_dir = os.path.join(args.output_dir, "logs")
     os.makedirs(args.logging_dir, exist_ok=True)
 
-    wandb.init(project=args.project_name, name=args.tag, config=args)
+    # Initialize file logging if enabled
+    if args.log_to_file:
+        log_dir = args.log_dir if args.log_dir else "logs"
+        args.log_dir = log_dir  # Store base log directory in args
+        args.log_run_dir = os.path.join(log_dir, args.tag)  # Store run-specific directory
+        init_file_logging(log_dir, args.tag)
+
+    if args.use_wandb:
+        wandb.init(project=args.project_name, name=args.tag, config=args)
     # clearml_task = Task.init(project_name='zo-bench', task_name=args.tag)
     # clearml_task.connect(args)
 
@@ -732,7 +860,10 @@ def main():
                 # Zero-shot / in-context learning
                 metrics = framework.evaluate(train_samples, eval_samples)
             logger.info(metrics)
-            wandb.log(metrics)
+            if args.use_wandb:
+                wandb.log(metrics)
+            if args.log_to_file:
+                log_to_file(metrics, prefix="eval")
             # for key, value in metrics.items():
             #     clearml_task.get_logger().report_scalar(
             #         title=key,
@@ -744,7 +875,10 @@ def main():
             if not args.no_eval:
                 logger.info("===== Train set %d =====" % train_set_seed)
                 logger.info(metrics)
-                wandb.log(metrics)
+                if args.use_wandb:
+                    wandb.log(metrics)
+                if args.log_to_file:
+                    log_to_file(metrics, prefix=f"train_set_{train_set_seed}")
                 # for key, value in metrics.items():
                 #     clearml_task.get_logger().report_scalar(
                 #         title=key,
@@ -768,7 +902,10 @@ def main():
             eval_samples = task.valid_samples
         metrics = framework.evaluate(train_sets, eval_samples, one_train_set_per_eval_sample=True)
         logger.info(metrics)
-        wandb.log(metrics)
+        if args.use_wandb:
+            wandb.log(metrics)
+        if args.log_to_file:
+            log_to_file(metrics, prefix="icl_eval")
         # for key, value in metrics.items():
         #     clearml_task.get_logger().report_scalar(
         #         title=key,

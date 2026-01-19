@@ -1,53 +1,99 @@
 import torch
 from torch.optim import Optimizer
+import numpy as np
+from typing import Optional, Dict, Any, Union, Iterable, Tuple
+from .base import ZeroOrderOptimizer
 
-
-class ZO_AdaMM(Optimizer):
-
-    def __init__(self, params, lr=1e-03, betas=(0.9, 0.999), mu=1e-03, eps=1e-12):
-        if lr < 0.0:
-            raise ValueError("Invalid learning rate: (} - should be >= 0.0".format(lr))
-        if not 0.0 <= betas[0] < 1.0:
-            raise ValueError("Invalid beta parameter: (} - should be in [0.0, 1.0[".format(betas[0]))
-        if not 0.0 <= betas[1] < 1.0:
-            raise ValueError("Invalid beta parameter: {} - should be in [0.0, 1.0l".format(betas[1]))
-        if not 0.0 <= mu < 1.0:
-            raise ValueError("Invalid mu parameter: {} - should be in [0.0, 1.0l".format(mu))
-
-        defaults = dict(lr=lr, betas=betas, mu=mu, eps=eps)
-        super().__init__(params, defaults)
-        # Compute the size of the parameters vector
-        self.size_params = 0
+class ZO_AdaMM(ZeroOrderOptimizer):
+    def __init__(self, 
+            params: Union[Iterable[torch.Tensor], Iterable[Dict[str, Any]]], 
+            lr: Optional[float] = None,
+            eps: Optional[float] = None,
+            weight_decay: float = 0.0,
+            tensor_sampling_type: str = "standard_normal",
+            matrix_sampling_type: str = None, 
+            perturbation_mode: str = "two_side",
+            betas: Tuple[float, float] = (0.9, 0.999),
+    ):
+        super().__init__(
+            params,
+            lr=lr,
+            eps=eps,
+            weight_decay=weight_decay,
+            tensor_sampling_type=tensor_sampling_type,
+            matrix_sampling_type=matrix_sampling_type,
+            perturbation_mode=perturbation_mode,
+        )
+        
         for group in self.param_groups:
+            group['betas'] = betas
             for p in group['params']:
-                self.size_params += torch.numel(p)
+                state = self.state[p]
+                state['step'] = 0
+                state['exp_avg'] = torch.zeros_like(p, memory_format=torch.preserve_format)
+                state['exp_avg_sq'] = torch.zeros_like(p, memory_format=torch.preserve_format)
+                state['max_exp_avg_sq'] = torch.zeros_like(p, memory_format=torch.preserve_format)
 
-    def step(self, closure):
+    @torch.no_grad()
+    def step(self, closure=None):
+        loss1, loss2 = None, None 
+        
+        self.zo_random_seed = np.random.randint(1_000_000_000)
 
+        self.generator.manual_seed(self.zo_random_seed)
+        self._mu_pertrub(scaling_factor=1)
+        loss1 = closure()
+
+        self.generator.manual_seed(self.zo_random_seed)
+        self._mu_pertrub(scaling_factor=-2)
+        loss2 = closure()
+        
+        self.projected_grad = (loss1 - loss2) / 2
+
+        # Restore parameters to original state (undo perturbations)
+        self.generator.manual_seed(self.zo_random_seed)
+        self._mu_pertrub(scaling_factor=1)
+
+        self.generator.manual_seed(self.zo_random_seed)
         for group in self.param_groups:
             beta1, beta2 = group['betas']
-
-            # Closure return the approximation for the gradient
-            grad_est = closure(self.size_params, group["mu"])
-
-            for p, grad in zip(group['params'], grad_est):
+            eps = group['eps']
+            lr = group['lr']
+            for p in group['params']:
                 state = self.state[p]
-
-                # Lazy state initialization
-                if len(state) == 0:
-                    # Exponential moving average of gradient values
-                    state['exp_avg'] = torch.zeros_like(p, memory_format=torch.preserve_format)
-
-                    # Exponential moving average of squared gradient values
-                    state['exp_avg_sq'] = torch.zeros_like(p, memory_format=torch.preserve_format)
-
-                    # Maintains max of all exp. moving avg. of sq. grad. values
-                    state['max_exp_avg_sq'] = torch.zeros_like(p, memory_format=torch.preserve_format)
-
+                state['step'] += 1
+                
+                # z = torch.normal(mean=0, std=1, size=p.shape, device=p.device, generator=self.generator)
+                # z = state['z']
+                
+                # seed = state['seed'] 
+                # self.generator.manual_seed(seed)
+                z = torch.normal(mean=0, std=1, size=p.shape, device=p.device, generator=self.generator)
+                grad = (z * self.projected_grad) / eps
+    
                 # Do the AdaMM updates
                 state['exp_avg'].mul_(beta1).add_(grad, alpha=(1.0 - beta1))
                 state['exp_avg_sq'].mul_(beta2).addcmul_(grad, grad, value=(1.0 - beta2))
                 state['max_exp_avg_sq'] = torch.maximum(state['max_exp_avg_sq'],
                                                         state['exp_avg_sq'])
 
-                p.data.addcdiv_(state['exp_avg'], state['exp_avg_sq'].sqrt().add_(group['eps']), value=(-group['lr']))
+                # Use max_exp_avg_sq for normalization as per Algorithm 1
+                # Add small epsilon for numerical stability (separate from perturbation eps)
+                p.data.addcdiv_(state['exp_avg'], state['max_exp_avg_sq'].sqrt().add_(1e-10), value=(-lr))
+
+        return loss1
+    
+    def _mu_pertrub(self, scaling_factor: float = 1.0):
+        for group in self.param_groups:
+            eps = group['eps']
+            for param in group['params']:
+                # Use the generator directly without resetting seed per parameter
+                # This ensures all parameters use the same random sequence
+                # self.generator.manual_seed(self.zo_random_seed)' 
+                state = self.state[param]
+                # if 'seed' not in state:
+                #     state['seed'] = np.random.randint(1_000_000_000)
+                # seed = state['seed'] 
+                # self.generator.manual_seed(seed)
+                z = torch.normal(mean=0, std=1, size=param.shape, device=param.device, generator=self.generator)
+                param.data.add_(z * eps * scaling_factor)

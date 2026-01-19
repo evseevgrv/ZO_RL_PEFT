@@ -202,12 +202,36 @@ class ZO_RL(ZeroOrderOptimizer):
                     mu_norm = torch.norm(state['mu']).item()
                     mu_norms.append(mu_norm)
         
+        # Get step from first parameter
+        step = None
+        try:
+            first_param = list(self.param_groups[0]['params'])[0]
+            step = self.state[first_param].get('step', None)
+        except (KeyError, IndexError, AttributeError):
+            pass
+        
         if mu_norms:
             avg_mu_norm = sum(mu_norms) / len(mu_norms)
-            wandb.log({"avg_mu_norm": avg_mu_norm})
+            if wandb.run is not None:
+                wandb.log({"avg_mu_norm": avg_mu_norm})
+            # Log to file if enabled
+            try:
+                from trainer import _optimizer_log_func
+                if _optimizer_log_func is not None and step is not None:
+                    _optimizer_log_func({"avg_mu_norm": avg_mu_norm}, step=step)
+            except (ImportError, AttributeError):
+                pass
 
         mu_degree = dot_product / (math.sqrt(new_mu_norms) * math.sqrt(old_mu_norms))
-        wandb.log({"mu_degree": mu_degree})
+        if wandb.run is not None:
+            wandb.log({"mu_degree": mu_degree})
+        # Log to file if enabled
+        try:
+            from trainer import _optimizer_log_func
+            if _optimizer_log_func is not None and step is not None:
+                _optimizer_log_func({"mu_degree": mu_degree}, step=step)
+        except (ImportError, AttributeError):
+            pass
         return loss1
     
     def _sparse_mu_perturb(self, scaling_factor=1.0, params_ratio=0.1):

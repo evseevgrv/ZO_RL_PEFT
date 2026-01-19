@@ -1,13 +1,18 @@
 #!/bin/bash
 
-export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=4
 export WANDB_DISABLED="false"
 export WANDB_ENTITY="andrey"
 export WANDB_API_KEY=""
 export HF_TOKEN=""
 
 # Список значений learning_rate для перебора
-learning_rates=("1e-4" "5e-4" "1e-3" "5e-3" "1e-2" "5e-2")
+learning_rates=(
+    # "2e-3"
+#    "6e-3" "7e-3" "8e-3" "9e-3" "1e-2"
+"5e-4" "1e-4" "1e-3" "5e-5" "5e-3" "1e-5" "1e-2" "5e-6" "1e-6"
+# "2e-5" "3e-5" "4e-5" "6e-5" "7e-5" "8e-5" "9e-5"
+)
 
 for lr in "${learning_rates[@]}"; do
     # Формируем тег для output_dir и wandb (заменяем точку и 'e' на допустимые символы)
@@ -17,7 +22,7 @@ for lr in "${learning_rates[@]}"; do
     command="python run.py"
 
     # Model and Task Configuration
-    command+=" --model_name=\"roberta-large\""
+    command+=" --model_name=\"facebook/opt-1.3b\""
     command+=" --lora"
     command+=" --task_name=\"SST2\""
     command+=" --trainer=\"zo_sgd\""
@@ -80,6 +85,9 @@ for lr in "${learning_rates[@]}"; do
     command+=" --k_value=5"
     command+=" --variance=1"
     command+=" --use_grad_first=False"
+
+    command+=" --beta1=0.9"
+    command+=" --beta2=0.999"
 
     # Запуск команды
     eval "$command"

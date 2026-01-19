@@ -131,6 +131,118 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 
+# Global storage for metrics history in trainer
+_trainer_metrics_history = {}
+# Global function for logging metrics from optimizers
+_optimizer_log_func = None
+
+def set_optimizer_log_func(log_func):
+    """Set the logging function to be used by optimizers"""
+    global _optimizer_log_func
+    _optimizer_log_func = log_func
+
+def _update_trainer_metrics_history(metrics_dict, step, log_dir):
+    """Update the history of metrics for trainer"""
+    global _trainer_metrics_history
+    # Use log_dir as key to separate different runs
+    if log_dir not in _trainer_metrics_history:
+        _trainer_metrics_history[log_dir] = {}
+    
+    history = _trainer_metrics_history[log_dir]
+    for metric_name, metric_value in metrics_dict.items():
+        if metric_name not in history:
+            history[metric_name] = []
+        if step is not None:
+            history[metric_name].append((step, metric_value))
+        else:
+            history[metric_name].append((len(history[metric_name]), metric_value))
+
+def _create_trainer_plot(metric_name, history, output_path):
+    """Create and save a plot for a metric"""
+    try:
+        import matplotlib
+        matplotlib.use('Agg')  # Use non-interactive backend
+        import matplotlib.pyplot as plt
+        
+        if not history:
+            return
+        
+        steps, values = zip(*history)
+        
+        plt.figure(figsize=(10, 6))
+        plt.plot(steps, values, marker='o', markersize=3, linewidth=1.5)
+        plt.xlabel('Step', fontsize=12)
+        plt.ylabel(metric_name, fontsize=12)
+        plt.title(f'{metric_name} over Training Steps', fontsize=14, fontweight='bold')
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        
+        # Save plot (overwrite existing)
+        plt.savefig(output_path, dpi=150, bbox_inches='tight')
+        plt.close()
+    except ImportError:
+        logger.warning("matplotlib not available, skipping plot creation")
+    except Exception as e:
+        logger.warning(f"Failed to create plot for {metric_name}: {e}")
+
+# Helper function for file logging
+def _convert_to_python_types(value):
+    """Convert PyTorch tensors and numpy arrays to Python native types"""
+    import torch
+    import numpy as np
+    if torch.is_tensor(value):
+        return value.item()
+    elif isinstance(value, np.ndarray):
+        return value.item() if value.size == 1 else value.tolist()
+    elif isinstance(value, (np.integer, np.floating)):
+        return value.item()
+    return value
+
+def _log_to_file_if_enabled(metrics_dict, step=None, log_dir=None):
+    """Write metrics to local .txt files and update plots if file logging is enabled"""
+    if log_dir is None:
+        return
+    
+    # Create directory if it doesn't exist
+    os.makedirs(log_dir, exist_ok=True)
+    
+    import json
+    from datetime import datetime
+    
+    # Convert all values to Python native types
+    metrics_dict = {k: _convert_to_python_types(v) for k, v in metrics_dict.items()}
+    
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    # Update metrics history
+    _update_trainer_metrics_history(metrics_dict, step, log_dir)
+    
+    # Write to a main log file
+    main_log_file = os.path.join(log_dir, "training_log.txt")
+    with open(main_log_file, "a", encoding="utf-8") as f:
+        log_entry = {
+            "timestamp": timestamp,
+            "step": step,
+            "metrics": metrics_dict
+        }
+        f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
+    
+    # Write individual metric files and create/update plots
+    history = _trainer_metrics_history.get(log_dir, {})
+    for metric_name, metric_value in metrics_dict.items():
+        # Write metric file
+        metric_file = os.path.join(log_dir, f"{metric_name}.txt")
+        with open(metric_file, "a", encoding="utf-8") as f:
+            if step is not None:
+                f.write(f"{step}\t{metric_value}\n")
+            else:
+                f.write(f"{timestamp}\t{metric_value}\n")
+        
+        # Create/update plot for this metric
+        if metric_name in history:
+            plot_path = os.path.join(log_dir, f"{metric_name}.png")
+            _create_trainer_plot(metric_name, history[metric_name], plot_path)
+
 # Name of the files used for checkpointing
 TRAINING_ARGS_NAME = "training_args.bin"
 TRAINER_STATE_NAME = "trainer_state.json"
@@ -149,6 +261,17 @@ class OurTrainer(Trainer):
         self.eval_samples = eval_samples
         self.perturb_module_regex = perturb_module_regex
         self.gradient_sparsity = None # FIXME: is it ok?
+
+    def log(self, logs: Dict[str, float]) -> None:
+        """Override log method to also log to files"""
+        # Call parent log method
+        super().log(logs)
+        # Also log to files if enabled
+        if hasattr(self.args, 'log_to_file') and self.args.log_to_file:
+            log_dir = getattr(self.args, 'log_run_dir', None) or getattr(self.args, 'log_dir', None) or "logs"
+            # Use global_step from state
+            step = getattr(self.state, 'global_step', None)
+            _log_to_file_if_enabled(logs, step=step, log_dir=log_dir)
 
     def create_optimizer_and_scheduler(self, num_training_steps):
         # self.optimizer = ""
@@ -387,6 +510,18 @@ class OurTrainer(Trainer):
                 lr_mu=args.lr_mu, 
                 use_grad_first=args.use_grad_first
             )
+            # Set logging function for optimizer if file logging is enabled
+            if hasattr(args, 'log_to_file') and args.log_to_file:
+                log_dir = getattr(args, 'log_run_dir', None) or getattr(args, 'log_dir', None) or "logs"
+                def optimizer_log_func(metrics_dict, step):
+                    _log_to_file_if_enabled(metrics_dict, step=step, log_dir=log_dir)
+                set_optimizer_log_func(optimizer_log_func            )
+            # Set logging function for optimizer if file logging is enabled
+            if hasattr(args, 'log_to_file') and args.log_to_file:
+                log_dir = getattr(args, 'log_run_dir', None) or getattr(args, 'log_dir', None) or "logs"
+                def optimizer_log_func(metrics_dict, step):
+                    _log_to_file_if_enabled(metrics_dict, step=step, log_dir=log_dir)
+                set_optimizer_log_func(optimizer_log_func)
         elif args.trainer == "zo_rl_sgd":
             if args.use_grad_first:
                 logger.info("Computing initial gradients for mu0 initialization")
@@ -412,6 +547,42 @@ class OurTrainer(Trainer):
                 lr_mu=args.lr_mu, 
                 use_grad_first=args.use_grad_first
             )
+            # Set logging function for optimizer if file logging is enabled
+            if hasattr(args, 'log_to_file') and args.log_to_file:
+                log_dir = getattr(args, 'log_run_dir', None) or getattr(args, 'log_dir', None) or "logs"
+                def optimizer_log_func(metrics_dict, step):
+                    _log_to_file_if_enabled(metrics_dict, step=step, log_dir=log_dir)
+                set_optimizer_log_func(optimizer_log_func)
+        elif args.trainer == "zo_adamm":
+            self.optimizer = ZO_AdaMM(
+                params=params, 
+                lr=args.learning_rate, 
+                eps=args.zo_eps, 
+                betas=(args.beta1, args.beta2), 
+                perturbation_mode=args.perturbation_mode, 
+                tensor_sampling_type=args.tensor_sampling_type, 
+                matrix_sampling_type=args.matrix_sampling_type
+            )
+        elif args.trainer == "zo_rl_adamm":
+            self.optimizer = ZO_RL_AdaMM(
+                params=params, 
+                lr=args.learning_rate, 
+                eps=args.zo_eps, 
+                betas=(args.beta1, args.beta2), 
+                perturbation_mode=args.perturbation_mode, 
+                tensor_sampling_type=args.tensor_sampling_type, 
+                matrix_sampling_type=args.matrix_sampling_type,
+                variance=args.variance,
+                lr_mu=args.lr_mu,
+                use_grad_first=args.use_grad_first,
+                k=args.k_value
+            )
+            # Set logging function for optimizer if file logging is enabled
+            if hasattr(args, 'log_to_file') and args.log_to_file:
+                log_dir = getattr(args, 'log_run_dir', None) or getattr(args, 'log_dir', None) or "logs"
+                def optimizer_log_func(metrics_dict, step):
+                    _log_to_file_if_enabled(metrics_dict, step=step, log_dir=log_dir)
+                set_optimizer_log_func(optimizer_log_func)
         else:
             # assert args.lr_scheduler_type == 'constant', "we did not implement lr_schedule."
             if args.optimizer == "adam": # FIXME: what to do with this? 
@@ -631,8 +802,13 @@ class OurTrainer(Trainer):
                     val_metrics = self.evaluate_func([], self.dev_samples)
                     test_metrics = self.evaluate_func([], self.eval_samples)
                     if "accuracy" in test_metrics:
-                        self.log({"test_acc": test_metrics["accuracy"], "val_acc": val_metrics["accuracy"]})
-                        wandb.log({"test_acc": test_metrics["accuracy"], "val_acc": val_metrics["accuracy"]})
+                        log_dict = {"test_acc": test_metrics["accuracy"], "val_acc": val_metrics["accuracy"]}
+                        self.log(log_dict)
+                        if hasattr(self.args, 'use_wandb') and self.args.use_wandb:
+                            wandb.log(log_dict)
+                        if hasattr(self.args, 'log_to_file') and self.args.log_to_file:
+                            log_dir = getattr(self.args, 'log_run_dir', None) or getattr(self.args, 'log_dir', None) or "logs"
+                            _log_to_file_if_enabled(log_dict, step=total_steps + 1, log_dir=log_dir)
                         # if clearml_task:
                         #     clearml_task.get_logger().report_scalar(
                         #         "Accuracy", "test", test_metrics["accuracy"], total_steps + 1)
@@ -645,7 +821,8 @@ class OurTrainer(Trainer):
                             log_dict['test_' + k] = test_metrics[k]
                             log_dict['val_' + k] = val_metrics[k]
                         self.log(log_dict)
-                        wandb.log(log_dict)
+                        if hasattr(self.args, 'use_wandb') and self.args.use_wandb:
+                            wandb.log(log_dict)
                         # if clearml_task:
                         #     for k, v in log_dict.items():
                         #         clearml_task.get_logger().report_scalar(
@@ -655,10 +832,17 @@ class OurTrainer(Trainer):
                 for device_id in range(torch.cuda.device_count()):
                     # this is not accurate since max memory does not happen simultaneously across all devices
                     max_memory_allocated += torch.cuda.max_memory_allocated(device_id)
-                self.log({"peak_mem": max_memory_allocated / 1024 ** 3,
-                          "step_consumption": train_step_duration * 1000})
-                wandb.log({"peak_mem": max_memory_allocated / 1024 ** 3,
-                           "step_consumption": train_step_duration * 1000})
+                # Convert loss to Python float
+                loss_value = tr_loss_step.item() if torch.is_tensor(tr_loss_step) else float(tr_loss_step)
+                log_dict = {"loss": loss_value,
+                           "peak_mem": max_memory_allocated / 1024 ** 3,
+                           "step_consumption": train_step_duration * 1000}
+                self.log(log_dict)
+                if hasattr(self.args, 'use_wandb') and self.args.use_wandb:
+                    wandb.log(log_dict)
+                if hasattr(self.args, 'log_to_file') and self.args.log_to_file:
+                    log_dir = getattr(self.args, 'log_run_dir', None) or getattr(self.args, 'log_dir', None) or "logs"
+                    _log_to_file_if_enabled(log_dict, step=total_steps, log_dir=log_dir)
                 # if clearml_task:
                 #     clearml_task.get_logger().report_scalar(
                 #         "Memory", "peak_mem", max_memory_allocated / 1024 ** 3, total_steps)
@@ -718,8 +902,12 @@ class OurTrainer(Trainer):
 
         self._memory_tracker.stop_and_update_metrics(metrics)
 
-        wandb.log(metrics)
+        if hasattr(self.args, 'use_wandb') and self.args.use_wandb:
+            wandb.log(metrics)
         self.log(metrics)
+        if hasattr(self.args, 'log_to_file') and self.args.log_to_file:
+            log_dir = getattr(self.args, 'log_run_dir', None) or getattr(self.args, 'log_dir', None) or "logs"
+            _log_to_file_if_enabled(metrics, step=self.state.global_step, log_dir=log_dir)
         # if clearml_task:
         #     for key, value in metrics.items():
         #         clearml_task.get_logger().report_scalar(

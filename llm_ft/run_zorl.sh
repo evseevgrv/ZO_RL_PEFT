@@ -1,6 +1,6 @@
 #!/bin/bash
 
-export CUDA_VISIBLE_DEVICES=4,5
+export CUDA_VISIBLE_DEVICES=1
 export WANDB_DISABLED="false"
 export WANDB_ENTITY="andrey"
 export WANDB_API_KEY=""
@@ -20,7 +20,7 @@ for lr in "${learning_rates[@]}"; do
     command+=" --model_name=\"roberta-large\""
     command+=" --lora"
     command+=" --task_name=\"SST2\""
-    command+=" --trainer=\"zo_rl\""
+    command+=" --trainer=\"sparse_jaguar_signsgd\""
 
     # Logging and Reporting
     command+=" --output_dir=\"result/SST2-FT-${TAG}\""
@@ -37,7 +37,7 @@ for lr in "${learning_rates[@]}"; do
     command+=" --save_strategy=\"steps\""
     command+=" --save_total_limit=1"
     command+=" --eval_steps=500"
-    command+=" --max_steps=6666"
+    command+=" --max_steps=40000"
     command+=" --save_steps=1000"
 
     # Dataset Settings
@@ -60,7 +60,7 @@ for lr in "${learning_rates[@]}"; do
     # Learning Rate Scheduler Settings
     command+=" --learning_rate=${lr}"
     command+=" --scheduler=\"cosine\""
-    command+=" --num_training_steps=6666"
+    command+=" --num_training_steps=40000"
     command+=" --warmup_steps=0"
     command+=" --min_lr_ratio=0.1"
     command+=" --scheduler_cycle_length=1"
