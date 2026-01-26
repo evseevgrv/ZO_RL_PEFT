@@ -9,7 +9,9 @@ export HF_TOKEN=""
 # Список значений learning_rate для перебора
 learning_rates=(
     # "2e-3"
-    "1e-3" "3e-3" "4e-3" "5e-3"
+    # "1e-3" "3e-3" "4e-3" "5e-3"
+    # 2e-3 3e-3 5e-3 6e-3 4e-3
+    3e-5 4e-5 6e-5 7e-5 
 )
 
 for lr in "${learning_rates[@]}"; do
@@ -21,7 +23,7 @@ for lr in "${learning_rates[@]}"; do
 
     # Model and Task Configuration
     command+=" --model_name=\"roberta-large\""
-    command+=" --lora"
+    # command+=" --lora"
     command+=" --task_name=\"SST2\""
     command+=" --trainer=\"zo_adamm\""
 
@@ -79,7 +81,7 @@ for lr in "${learning_rates[@]}"; do
     # Sparse Jaguar-Specific Parameters
     command+=" --params_ratio=0.1"
 
-    command+=" --lr_mu=1e-2"
+    command+=" --lr_mu=4e-2"
     command+=" --k_value=5"
     command+=" --variance=1"
     command+=" --use_grad_first=False"

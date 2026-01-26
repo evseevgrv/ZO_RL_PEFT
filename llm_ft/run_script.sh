@@ -1,6 +1,6 @@
 #!/bin/bash
 
-export CUDA_VISIBLE_DEVICES=4
+export CUDA_VISIBLE_DEVICES=5
 export WANDB_DISABLED="false"
 export WANDB_ENTITY="andrey"
 export WANDB_API_KEY=""
@@ -10,8 +10,10 @@ export HF_TOKEN=""
 learning_rates=(
     # "2e-3"
 #    "6e-3" "7e-3" "8e-3" "9e-3" "1e-2"
-"5e-4" "1e-4" "1e-3" "5e-5" "5e-3" "1e-5" "1e-2" "5e-6" "1e-6"
+# "5e-4" "1e-4" "1e-3" "5e-5" "5e-3" "1e-5" "1e-2" "5e-6" "1e-6"
 # "2e-5" "3e-5" "4e-5" "6e-5" "7e-5" "8e-5" "9e-5"
+# "1e-8" "5e-8" "1e-7" "5e-7" "1e-6" "5e-6" "1e-5"
+4e-8 6e-8 7e-8
 )
 
 for lr in "${learning_rates[@]}"; do
@@ -23,7 +25,7 @@ for lr in "${learning_rates[@]}"; do
 
     # Model and Task Configuration
     command+=" --model_name=\"facebook/opt-1.3b\""
-    command+=" --lora"
+    # command+=" --lora"
     command+=" --task_name=\"SST2\""
     command+=" --trainer=\"zo_sgd\""
 

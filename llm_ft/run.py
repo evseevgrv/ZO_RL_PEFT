@@ -768,7 +768,7 @@ def main():
     if not args.tag:
         args.tag = f"{args.trainer}-{args.task_name}-{args.template_ver}-{args.model_name.split('/')[-1]}-OPTIM_{args.mode}-STEP{args.max_steps}-{args.optimizer}-LR{args.learning_rate}-{args.scheduler}-ZOEPS{args.zo_eps}-Q{args.q}-MATRXSAMPLING{args.matrix_sampling_type}-TENSORSAMPLING{args.tensor_sampling_type}"
         if args.trainer == "zo_rl" or args.trainer == "zo_rl_sgd" or args.trainer == "zo_rl_adamm":
-            args.tag = f"{args.trainer}-{args.task_name}-LR{args.learning_rate}-LR_mu{args.lr_mu}-K{args.k_value}-VAR{args.variance}-USE_GRAD_FIRST{args.use_grad_first}-{args.tag}-NUM_TRAIN{args.num_train}"
+            args.tag = f"{args.trainer}-{args.model_name.split('/')[-1]}-OPTIM_{args.mode}-{args.task_name}-LR{args.learning_rate}-LR_mu{args.lr_mu}-K{args.k_value}"
         args.tag = "momen" + args.tag if args.momentum > 0 else args.tag
         args.tag = f"sparse_grad-{args.gradient_sparsity}-{args.sparse_gradient_group}-{args.sparse_gradient_resample_steps}-" + args.tag if args.gradient_sparsity is not None else args.tag
         args.tag = f"module_perturb-{args.perturbed_module_level}-" + args.tag if args.module_wise_perturbation else args.tag

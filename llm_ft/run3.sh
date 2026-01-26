@@ -1,6 +1,6 @@
 #!/bin/bash
 
-export CUDA_VISIBLE_DEVICES=2
+export CUDA_VISIBLE_DEVICES=3
 export WANDB_DISABLED="false"
 export WANDB_ENTITY="andrey"
 export WANDB_API_KEY=""
@@ -8,8 +8,10 @@ export HF_TOKEN=""
 
 # Список значений learning_rate для перебора
 learning_rates=(
-# "5e-5" "6e-5" "7e-5" "8e-5" "9e-5" "2e-4" "3e-4" "4e-4" "5e-4"
-"1e-4" "2e-4" "3e-4" "4e-4" "6e-4" "7e-4" "8e-4" "9e-4"
+    # "2e-3"
+    # "1e-3" "3e-3" "4e-3" "5e-3"
+    # 2e-3 3e-3 5e-3 6e-3 4e-3
+    1e-8 5e-8 1e-7 5e-7 1e-6 5e-6 1e-5 5e-5 1e-4 5e-4 1e-3
 )
 
 for lr in "${learning_rates[@]}"; do
@@ -20,10 +22,10 @@ for lr in "${learning_rates[@]}"; do
     command="python run.py"
 
     # Model and Task Configuration
-    command+=" --model_name=\"roberta-large\""
+    command+=" --model_name=\"facebook/opt-1.3b\""
     command+=" --lora"
     command+=" --task_name=\"SST2\""
-    command+=" --trainer=\"zo_rl_sgd\""
+    command+=" --trainer=\"zo_adamm\""
 
     # Logging and Reporting
     command+=" --output_dir=\"result/SST2-FT-${TAG}\""
@@ -53,7 +55,7 @@ for lr in "${learning_rates[@]}"; do
     # Training Hyperparameters
     command+=" --perturbation_mode=\"two_side\""
     command+=" --zo_eps=1e-3"
-    command+=" --momentum=0.9"
+    command+=" --momentum=0.0"
     command+=" --weight_decay=0.0"
     command+=" --module_wise_perturbation=False"
 
@@ -74,22 +76,18 @@ for lr in "${learning_rates[@]}"; do
 
     # Jaguar-Specific Parameters
     command+=" --zo_tau=1e-3"
-    command+=" --zo_beta=0.9"
+    command+=" --zo_beta=0.0"
 
     # Sparse Jaguar-Specific Parameters
     command+=" --params_ratio=0.1"
 
-    command+=" --lr_mu=8e-3"
+    command+=" --lr_mu=4e-2"
     command+=" --k_value=5"
     command+=" --variance=1"
     command+=" --use_grad_first=False"
 
     command+=" --beta1=0.9"
     command+=" --beta2=0.999"
-
-    # command+=" --log_to_file"
-
-    # command+=" --no_use_wandb"
 
     # Запуск команды
     eval "$command"
