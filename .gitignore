@@ -209,4 +209,8 @@ __marimo__/
 /**/wandb/
 /**/result/
 /**/mlruns/
-**/plots 
+**/plots
+
+# Project logs and artifacts
+logs/
+result/
