@@ -1,26 +1,26 @@
 #!/bin/bash
 
-export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=2
 export WANDB_DISABLED="false"
 export WANDB_ENTITY="andrey"
 export WANDB_API_KEY=""
 export HF_TOKEN=""
 
 learning_rates=(
-    # 5e-4
-    6e-4 7e-4 8e-4 9e-4 1e-3 2e-3 3e-3 4e-3 5e-3 1e-4 2e-4 3e-4 4e-4
+   2e-8 3e-8 4e-8 5e-8 6e-8 7e-8 8e-8 9e-8 1e-7
 )
 
 for lr in "${learning_rates[@]}"; do
-    TAG="lr_${lr//./_}"
-    TAG="${TAG//e/E}"
+    # Формируем тег для output_dir и wandb (заменяем точку и 'e' на допустимые символы)
+    TAG="lr_${lr//./_}"        # Заменяем '.' на '_' (например: 1e-3 → lr_1e-3, 0.01 → lr_0_01)
+    TAG="${TAG//e/E}"          # Опционально: заменить 'e' на 'E' для читаемости
 
     command="python run.py"
 
     # Model and Task Configuration
-    command+=" --model_name=\"roberta-large\""
-    command+=" --lora"
-    command+=" --task_name=\"BoolQ\""
+    command+=" --model_name=\"facebook/opt-13b\""
+    # command+=" --lora"
+    command+=" --task_name=\"SST2\""
     command+=" --trainer=\"zo_sgd\""
 
     # Logging and Reporting
@@ -28,7 +28,7 @@ for lr in "${learning_rates[@]}"; do
     command+=" --report_to=\"wandb\""
     command+=" --project_name=\"zo-rl\""
     command+=" --logging_steps=10"
-    command+=" --run_name=\"${TAG}\""
+    command+=" --run_name=\"${TAG}\""  # Если run.py поддерживает --run_name
 
     # Training Configuration
     command+=" --num_train_epochs=5"
@@ -40,8 +40,6 @@ for lr in "${learning_rates[@]}"; do
     command+=" --eval_steps=500"
     command+=" --max_steps=20000"
     command+=" --save_steps=1000"
-
-    command+=" --max_length 512"
 
     # Dataset Settings
     command+=" --num_eval=1000"
@@ -79,7 +77,7 @@ for lr in "${learning_rates[@]}"; do
     # Sparse Jaguar-Specific Parameters
     command+=" --params_ratio=0.1"
 
-    command+=" --lr_mu=1e-2"
+    command+=" --lr_mu=1e-3"
     command+=" --k_value=5"
     command+=" --variance=1"
     command+=" --use_grad_first=False"
@@ -87,5 +85,10 @@ for lr in "${learning_rates[@]}"; do
     command+=" --beta1=0.9"
     command+=" --beta2=0.999"
 
+    # command+=" --log_to_file"
+
+    # command+=" --no_use_wandb"
+
+    # Запуск команды
     eval "$command"
 done

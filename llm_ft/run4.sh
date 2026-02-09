@@ -1,20 +1,17 @@
 #!/bin/bash
 
-export CUDA_VISIBLE_DEVICES=5
+export CUDA_VISIBLE_DEVICES=7
 export WANDB_DISABLED="false"
 export WANDB_ENTITY="andrey"
 export WANDB_API_KEY=""
 export HF_TOKEN=""
 
-# Список значений learning_rate для перебора
 learning_rates=(
-# "5e-5" "6e-5" "7e-5" "8e-5" "9e-5" "2e-4" "3e-4" "4e-4" "5e-4"
-# 5e-3 6e-3 7e-3 9e-3 1e-2
-# 2e-3 3e-3 8e-4 9e-4
-2e-8 3e-8 4e-8 
+    # 1e-8 
+    6e-5 7e-5 8e-5 9e-5 1e-4 2e-4 3e-4 4e-4
 )
 
-for mu_lr in "${learning_rates[@]}"; do
+for lr in "${learning_rates[@]}"; do
     # Формируем тег для output_dir и wandb (заменяем точку и 'e' на допустимые символы)
     TAG="lr_${lr//./_}"        # Заменяем '.' на '_' (например: 1e-3 → lr_1e-3, 0.01 → lr_0_01)
     TAG="${TAG//e/E}"          # Опционально: заменить 'e' на 'E' для читаемости
@@ -22,10 +19,10 @@ for mu_lr in "${learning_rates[@]}"; do
     command="python run.py"
 
     # Model and Task Configuration
-    command+=" --model_name=\"facebook/opt-1.3b\""
-    # command+=" --lora"
+    command+=" --model_name=\"meta-llama/Llama-2-7b-hf\""
+    command+=" --lora"
     command+=" --task_name=\"SST2\""
-    command+=" --trainer=\"zo_rl_sgd\""
+    command+=" --trainer=\"zo_adamm\""
 
     # Logging and Reporting
     command+=" --output_dir=\"result/SST2-FT-${TAG}\""
@@ -63,7 +60,7 @@ for mu_lr in "${learning_rates[@]}"; do
     command+=" --overwrite_output_dir"
 
     # Learning Rate Scheduler Settings
-    command+=" --learning_rate=${mu_lr}"
+    command+=" --learning_rate=${lr}"
     command+=" --scheduler=\"cosine\""
     command+=" --num_training_steps=20000"
     command+=" --warmup_steps=0"
