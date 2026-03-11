@@ -1,13 +1,13 @@
 #!/bin/bash
 
-export CUDA_VISIBLE_DEVICES=2
+export CUDA_VISIBLE_DEVICES=7
 export WANDB_DISABLED="false"
 export WANDB_ENTITY="andrey"
 export WANDB_API_KEY=""
 export HF_TOKEN=""
 
 learning_rates=(
-    1e-6 5e-6 1e-5 5e-5 1e-4 5e-4 1e-3 5e-3
+5e-5 6e-5 7e-5 8e-5 9e-5 1e-4 2e-4 3e-4 4e-4 5e-4
 )
 
 for lr in "${learning_rates[@]}"; do
@@ -20,8 +20,8 @@ for lr in "${learning_rates[@]}"; do
     # Model and Task Configuration
     command+=" --model_name=\"facebook/opt-13b\""
     command+=" --lora"
-    command+=" --task_name=\"SST2\""
-    command+=" --trainer=\"zo_adamm\""
+    command+=" --task_name=\"Copa\""
+    command+=" --trainer=\"zo_rl_adamm\""
 
     # Logging and Reporting
     command+=" --output_dir=\"result/SST2-FT-${TAG}\""
@@ -43,8 +43,8 @@ for lr in "${learning_rates[@]}"; do
 
     # Dataset Settings
     command+=" --num_eval=1000"
-    command+=" --num_train=1000"
-    command+=" --num_dev=500"
+    command+=" --num_train=1000000"
+    # command+=" --num_dev=no"
     command+=" --train_as_classification"
     command+=" --train_set_seed=0"
 

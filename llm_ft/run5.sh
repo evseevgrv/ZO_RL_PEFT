@@ -7,7 +7,7 @@ export WANDB_API_KEY=""
 export HF_TOKEN=""
 
 learning_rates=(
-   4e-5 5e-5 6e-5 7e-5 8e-5 9e-5 1e-4 
+   1e-5 2e-5 3e-5 4e-5 6e-5 7e-5 8e-5 9e-5 1e-4
 )
 
 for lr in "${learning_rates[@]}"; do
@@ -21,7 +21,7 @@ for lr in "${learning_rates[@]}"; do
     command+=" --model_name=\"meta-llama/Llama-2-7b-hf\""
     command+=" --lora"
     command+=" --task_name=\"Copa\""
-    command+=" --trainer=\"zo_rl_sgd\""
+    command+=" --trainer=\"zo_rl_adamm\""
 
     # Logging and Reporting
     command+=" --output_dir=\"result/SST2-FT-${TAG}\""

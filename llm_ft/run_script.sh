@@ -1,14 +1,13 @@
 #!/bin/bash
 
-export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=2
 export WANDB_DISABLED="false"
 export WANDB_ENTITY="andrey"
 export WANDB_API_KEY=""
 export HF_TOKEN=""
 
 learning_rates=(
-    # 5e-4
-    6e-4 7e-4 8e-4 9e-4 1e-3 2e-3 3e-3 4e-3 5e-3 1e-4 2e-4 3e-4 4e-4
+    1e-5 5e-5 1e-4 5e-4 1e-3 5e-3
 )
 
 for lr in "${learning_rates[@]}"; do
@@ -19,7 +18,7 @@ for lr in "${learning_rates[@]}"; do
 
     # Model and Task Configuration
     command+=" --model_name=\"roberta-large\""
-    command+=" --lora"
+    # command+=" --lora"
     command+=" --task_name=\"BoolQ\""
     command+=" --trainer=\"zo_sgd\""
 
