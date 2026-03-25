@@ -1,11 +1,207 @@
-import os 
-
+import json
+import logging
 import math
+import os
+from collections import defaultdict
+from datetime import datetime
 from functools import partial
 
+import numpy as np
 import torch
-from torch.optim.lr_scheduler import LambdaLR
 import transformers
+from torch.optim.lr_scheduler import LambdaLR
+
+_local_file_logging_logger = logging.getLogger(__name__)
+_local_run_logger = None
+
+
+class LocalRunLogger:
+    def __init__(self, log_dir, run_tag, primary_eval_metric=None):
+        self.run_tag = run_tag
+        self.run_dir = os.path.join(log_dir, run_tag)
+        self.log_path = os.path.join(self.run_dir, f"{run_tag}.jsonl")
+        self.primary_eval_metric = primary_eval_metric
+        self.series_history = defaultdict(list)
+        self.test_series_key = None
+        os.makedirs(self.run_dir, exist_ok=True)
+        with open(self.log_path, "w", encoding="utf-8"):
+            pass
+        for filename in os.listdir(self.run_dir):
+            if filename.startswith(f"{self.run_tag}__") and filename.endswith(".pdf"):
+                os.remove(os.path.join(self.run_dir, filename))
+
+    def log_metrics(self, metrics_dict, step=None, phase="metrics"):
+        metrics = {
+            key: self._convert_to_python_types(value)
+            for key, value in metrics_dict.items()
+        }
+        event = {
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "step": step,
+            "phase": phase,
+            "metrics": metrics,
+        }
+        with open(self.log_path, "a", encoding="utf-8") as handle:
+            handle.write(json.dumps(event, ensure_ascii=False) + "\n")
+
+        for series_key, value in self._extract_plot_updates(metrics, phase).items():
+            if not isinstance(value, (int, float)):
+                continue
+            history = self.series_history[series_key]
+            series_step = step if step is not None else len(history)
+            history.append((series_step, float(value)))
+            self._render_series_plot(series_key)
+
+    def _extract_plot_updates(self, metrics, phase):
+        updates = {}
+
+        if phase == "train" and "train_loss" in metrics:
+            updates["train_loss"] = metrics["train_loss"]
+        elif phase == "train" and "loss" in metrics:
+            updates["train_loss"] = metrics["loss"]
+
+        if phase == "train" and "peak_memory_gb" in metrics:
+            updates["peak_memory_gb"] = metrics["peak_memory_gb"]
+        elif phase == "train" and "peak_mem" in metrics:
+            updates["peak_memory_gb"] = metrics["peak_mem"]
+
+        test_series_key, test_metric_value = self._resolve_test_metric(metrics, phase)
+        if test_series_key is not None and test_metric_value is not None:
+            updates[test_series_key] = test_metric_value
+
+        return updates
+
+    def _resolve_test_metric(self, metrics, phase):
+        if phase not in {"eval", "icl_eval"}:
+            return None, None
+
+        if "test_accuracy" in metrics:
+            self.test_series_key = "test_accuracy"
+            return self.test_series_key, metrics["test_accuracy"]
+
+        if "test_acc" in metrics:
+            self.test_series_key = "test_accuracy"
+            return self.test_series_key, metrics["test_acc"]
+
+        if phase in {"eval", "icl_eval"} and "accuracy" in metrics:
+            self.test_series_key = "test_accuracy"
+            return self.test_series_key, metrics["accuracy"]
+
+        preferred_key = None
+        if self.primary_eval_metric:
+            preferred_key = f"test_{self.primary_eval_metric}"
+            if preferred_key in metrics:
+                self.test_series_key = preferred_key
+                return self.test_series_key, metrics[preferred_key]
+            if phase in {"eval", "icl_eval"} and self.primary_eval_metric in metrics:
+                self.test_series_key = preferred_key
+                return self.test_series_key, metrics[self.primary_eval_metric]
+
+        test_keys = [key for key in metrics if key.startswith("test_")]
+        if test_keys:
+            chosen_key = sorted(test_keys)[0]
+            self.test_series_key = chosen_key
+            return chosen_key, metrics[chosen_key]
+
+        return None, None
+
+    def _render_series_plot(self, series_key):
+        history = self.series_history.get(series_key)
+        if not history:
+            return
+
+        try:
+            import matplotlib
+
+            matplotlib.use("Agg")
+            import matplotlib.pyplot as plt
+        except ImportError:
+            _local_file_logging_logger.warning(
+                "matplotlib is not available, skipping local PDF chart generation"
+            )
+            return
+        except Exception as exc:
+            _local_file_logging_logger.warning(
+                f"Failed to import matplotlib for local logging: {exc}"
+            )
+            return
+
+        steps, values = zip(*history)
+        colors = {
+            "train_loss": "#1f77b4",
+            "peak_memory_gb": "#2ca02c",
+        }
+        color = colors.get(series_key, "#d62728")
+
+        fig, ax = plt.subplots(figsize=(8.5, 5.0), facecolor="white")
+        ax.set_facecolor("white")
+        ax.plot(steps, values, color=color, linewidth=2.0)
+        ax.grid(True, color="#d9d9d9", linewidth=0.8, alpha=0.7)
+        ax.set_xlabel("Step", fontsize=12)
+        ax.set_ylabel(self._axis_label(series_key), fontsize=12)
+        ax.tick_params(axis="both", labelsize=10)
+        for spine in ("top", "right"):
+            ax.spines[spine].set_visible(False)
+
+        fig.tight_layout()
+        fig.savefig(self._plot_path(series_key), format="pdf", bbox_inches="tight")
+        plt.close(fig)
+
+    def _plot_path(self, series_key):
+        return os.path.join(self.run_dir, f"{self.run_tag}__{series_key}.pdf")
+
+    def _axis_label(self, series_key):
+        if series_key == "train_loss":
+            return "Train Loss"
+        if series_key == "peak_memory_gb":
+            return "Peak Memory (GB)"
+        if series_key == "test_accuracy":
+            return "Test Accuracy"
+        return series_key.replace("_", " ").title()
+
+    def _convert_to_python_types(self, value):
+        if torch.is_tensor(value):
+            return value.item()
+        if isinstance(value, np.ndarray):
+            return value.item() if value.size == 1 else value.tolist()
+        if isinstance(value, (np.integer, np.floating)):
+            return value.item()
+        return value
+
+
+def init_local_run_logger(log_dir, run_tag, primary_eval_metric=None):
+    global _local_run_logger
+    _local_run_logger = LocalRunLogger(
+        log_dir=log_dir,
+        run_tag=run_tag,
+        primary_eval_metric=primary_eval_metric,
+    )
+    _local_file_logging_logger.info(
+        "Local file logging enabled. Artifacts will be written to %s",
+        _local_run_logger.run_dir,
+    )
+    return _local_run_logger.run_dir
+
+
+def log_local_metrics(metrics_dict, step=None, phase="metrics"):
+    if _local_run_logger is None:
+        return
+    _local_run_logger.log_metrics(metrics_dict, step=step, phase=phase)
+
+
+def infer_local_log_phase(metrics_dict):
+    metric_keys = set(metrics_dict.keys())
+    if any(key.startswith("test_") or key.startswith("val_") for key in metric_keys):
+        return "eval"
+    if metric_keys & {
+        "train_runtime",
+        "train_samples_per_second",
+        "train_steps_per_second",
+        "total_flos",
+        "train_loss",
+    }:
+        return "summary"
+    return "train"
 
 def get_scheduler(
     optimizer,
