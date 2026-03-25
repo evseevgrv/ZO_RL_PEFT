@@ -563,6 +563,25 @@ class OurTrainer(Trainer):
                 tensor_sampling_type=args.tensor_sampling_type, 
                 matrix_sampling_type=args.matrix_sampling_type
             )
+        elif args.trainer == "zo_adamu":
+            total_steps = max(3, args.max_steps if args.max_steps is not None and args.max_steps > 0 else args.num_training_steps)
+            adamu_t1 = args.adamu_t1 if args.adamu_t1 is not None else min(1024, total_steps)
+            adamu_t2 = args.adamu_t2 if args.adamu_t2 is not None else max(adamu_t1 + 1, int(0.8 * total_steps))
+            adamu_t3 = args.adamu_t3 if args.adamu_t3 is not None else total_steps
+            self.optimizer = ZO_AdaMU(
+                params=params,
+                lr=args.learning_rate,
+                eps=args.zo_eps,
+                weight_decay=args.weight_decay,
+                perturbation_mode=args.perturbation_mode,
+                tensor_sampling_type=args.tensor_sampling_type,
+                matrix_sampling_type=args.matrix_sampling_type,
+                sigma=args.adamu_sigma,
+                max_steps=adamu_t3,
+                t1=adamu_t1,
+                t2=adamu_t2,
+                t3=adamu_t3,
+            )
         elif args.trainer == "zo_rl_adamm":
             self.optimizer = ZO_RL_AdaMM(
                 params=params, 
