@@ -1,5 +1,5 @@
 import json
-import logging
+import logging as py_logging
 import math
 import os
 from collections import defaultdict
@@ -11,7 +11,7 @@ import torch
 import transformers
 from torch.optim.lr_scheduler import LambdaLR
 
-_local_file_logging_logger = logging.getLogger(__name__)
+_local_file_logging_logger = py_logging.getLogger(__name__)
 _local_run_logger = None
 
 

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-export CUDA_VISIBLE_DEVICES=1
+export CUDA_VISIBLE_DEVICES=0
 export WANDB_DISABLED="false"
 export WANDB_ENTITY=""
 export WANDB_API_KEY=""
@@ -8,7 +8,7 @@ export HF_TOKEN=""
 
 # List of learning_rate values to sweep
 learning_rates=(
-    1e-3
+    1e-6 5e-6 1e-5 5e-5 1e-4 5e-4 1e-3 5e-3
 )
 
 for lr in "${learning_rates[@]}"; do
@@ -19,10 +19,10 @@ for lr in "${learning_rates[@]}"; do
     command="python run.py"
 
     # Model and Task Configuration
-    command+=" --model_name=\"facebook/opt-1.3b\""
-    command+=" --lora"
+    command+=" --model_name=\"roberta-large\""
+    # command+=" --lora"
     command+=" --task_name=\"SST2\""
-    command+=" --trainer=\"zo_adamm\""
+    command+=" --trainer=\"zo_adamu\""
 
     # Logging and Reporting
     command+=" --output_dir=\"result/SST2-FT-${TAG}\""
@@ -69,7 +69,7 @@ for lr in "${learning_rates[@]}"; do
 
     # Sampling Methods
     command+=" --tensor_sampling_type=\"standard_normal\""
-    command+=" --matrix_sampling_type=\"Random_baseline\"" 
+    command+=" --matrix_sampling_type=\"Random_baseline\"" 
 
     # Jaguar-Specific Parameters
     command+=" --zo_tau=1e-3"
@@ -85,6 +85,9 @@ for lr in "${learning_rates[@]}"; do
 
     command+=" --beta1=0.9"
     command+=" --beta2=0.999"
+
+    command+="--log_to_file"
+    command+="--no_use_wandb"
 
     # Run command
     eval "$command"
