@@ -5,6 +5,12 @@ export WANDB_DISABLED="false"
 export WANDB_ENTITY=""
 export WANDB_API_KEY=""
 export HF_TOKEN=""
+export HF_HOME="/tmp/zorl_hf_cache"
+export HUGGINGFACE_HUB_CACHE="$HF_HOME/hub"
+export TRANSFORMERS_CACHE="$HF_HOME/transformers"
+export TMPDIR="/tmp/zorl_tmp"
+
+mkdir -p "$HF_HOME" "$HUGGINGFACE_HUB_CACHE" "$TRANSFORMERS_CACHE" "$TMPDIR"
 
 # List of learning_rate values to sweep
 learning_rates=(
@@ -26,7 +32,7 @@ for lr in "${learning_rates[@]}"; do
 
     # Logging and Reporting
     command+=" --output_dir=\"result/SST2-FT-${TAG}\""
-    command+=" --report_to=\"wandb\""
+    command+=" --report_to=\"none\""
     command+=" --project_name=\"zo-rl\""
     command+=" --logging_steps=10"
     command+=" --run_name=\"${TAG}\""  # If run.py supports --run_name
@@ -86,8 +92,8 @@ for lr in "${learning_rates[@]}"; do
     command+=" --beta1=0.9"
     command+=" --beta2=0.999"
 
-    command+="--log_to_file"
-    command+="--no_use_wandb"
+    command+=" --log_to_file"
+    command+=" --no_use_wandb"
 
     # Run command
     eval "$command"
