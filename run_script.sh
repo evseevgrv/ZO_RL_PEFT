@@ -26,7 +26,7 @@ for lr in "${learning_rates[@]}"; do
     TAG="lr_${lr//./_}"        # Replace '.' with '_' (e.g.: 1e-3 → lr_1e-3, 0.01 → lr_0_01)
     TAG="${TAG//e/E}"          # Optionally replace 'e' with 'E' for readability
 
-    command="python run.py"
+    command="PYTHONNOUSERSITE=1 PYTHONPATH=\"$SCRIPT_DIR\" python \"$SCRIPT_DIR/run.py\""
 
     # Model and Task Configuration
     command+=" --model_name=\"roberta-large\""

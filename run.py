@@ -8,6 +8,16 @@ PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
+
+def _load_local_module(module_name, relative_path):
+    module_path = os.path.join(PROJECT_ROOT, relative_path)
+    module_spec = importlib.util.spec_from_file_location(module_name, module_path)
+    if module_spec is None or module_spec.loader is None:
+        raise ModuleNotFoundError(f"Cannot load local module {module_name} from {module_path}")
+    module = importlib.util.module_from_spec(module_spec)
+    module_spec.loader.exec_module(module)
+    return module
+
 import wandb
 # from clearml import Task
 from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
@@ -22,14 +32,45 @@ from transformers import (
     DataCollatorForTokenClassification
 )
 
-from metrics import calculate_metric
 from models.modeling_mistral import (
     MistralForCausalLM,
     MistralConfig
 )
-from training_utils import init_local_run_logger, log_local_metrics
-from trainer import OurTrainer
-from utils import *
+try:
+    from metrics import calculate_metric
+except ModuleNotFoundError as exc:
+    if exc.name != "metrics":
+        raise
+    metrics_module = _load_local_module("local_metrics", "metrics.py")
+    calculate_metric = metrics_module.calculate_metric
+
+try:
+    from training_utils import init_local_run_logger, log_local_metrics
+except ModuleNotFoundError as exc:
+    if exc.name != "training_utils":
+        raise
+    training_utils_module = _load_local_module("local_training_utils", "training_utils.py")
+    init_local_run_logger = training_utils_module.init_local_run_logger
+    log_local_metrics = training_utils_module.log_local_metrics
+
+try:
+    from trainer import OurTrainer
+except ModuleNotFoundError as exc:
+    if exc.name != "trainer":
+        raise
+    trainer_module = _load_local_module("local_trainer", "trainer.py")
+    OurTrainer = trainer_module.OurTrainer
+
+try:
+    from utils import *
+except ModuleNotFoundError as exc:
+    if exc.name != "utils":
+        raise
+    utils_module = _load_local_module("local_utils", "utils.py")
+    exported_names = getattr(utils_module, "__all__", None)
+    if exported_names is None:
+        exported_names = [name for name in dir(utils_module) if not name.startswith("_")]
+    globals().update({name: getattr(utils_module, name) for name in exported_names})
 
 try:
     from tasks.tasks import get_task
