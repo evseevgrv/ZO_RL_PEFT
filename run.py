@@ -1,4 +1,5 @@
 import argparse
+import importlib.util
 import os
 import random
 import sys
@@ -26,10 +27,25 @@ from models.modeling_mistral import (
     MistralForCausalLM,
     MistralConfig
 )
-from tasks.tasks import get_task
 from training_utils import init_local_run_logger, log_local_metrics
 from trainer import OurTrainer
 from utils import *
+
+try:
+    from tasks.tasks import get_task
+except ModuleNotFoundError as exc:
+    if exc.name != "tasks.tasks":
+        raise
+    tasks_module_path = os.path.join(PROJECT_ROOT, "tasks", "tasks.py")
+    tasks_spec = importlib.util.spec_from_file_location(
+        "local_tasks_tasks",
+        tasks_module_path,
+    )
+    if tasks_spec is None or tasks_spec.loader is None:
+        raise
+    tasks_module = importlib.util.module_from_spec(tasks_spec)
+    tasks_spec.loader.exec_module(tasks_module)
+    get_task = tasks_module.get_task
 
 os.environ["TRANSFORMERS_CACHE"] = "./cache"
 
