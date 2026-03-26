@@ -14,7 +14,7 @@ mkdir -p "$HF_HOME" "$HUGGINGFACE_HUB_CACHE" "$TRANSFORMERS_CACHE" "$TMPDIR"
 
 # List of learning_rate values to sweep
 learning_rates=(
-    1e-6 5e-6 1e-5 5e-5 1e-4 5e-4 1e-3 5e-3
+    1e-5 
 )
 
 for lr in "${learning_rates[@]}"; do
@@ -31,22 +31,23 @@ for lr in "${learning_rates[@]}"; do
     command+=" --trainer=\"zo_adamu\""
 
     # Logging and Reporting
-    command+=" --output_dir=\"result/SST2-FT-${TAG}\""
+    command+=" --output_dir=\"/tmp/zorl_runs/${TAG}\""
     command+=" --report_to=\"none\""
     command+=" --project_name=\"zo-rl\""
     command+=" --logging_steps=10"
     command+=" --run_name=\"${TAG}\""  # If run.py supports --run_name
+    command+=" --log_dir=\"logs\""
 
     # Training Configuration
     command+=" --num_train_epochs=5"
     command+=" --per_device_train_batch_size=16"
-    command+=" --load_best_model_at_end"
+    # command+=" --load_best_model_at_end"
     command+=" --evaluation_strategy=\"steps\""
-    command+=" --save_strategy=\"steps\""
-    command+=" --save_total_limit=1"
+    command+=" --save_strategy=\"no\""
+    # command+=" --save_total_limit=1"
     command+=" --eval_steps=500"
     command+=" --max_steps=20000"
-    command+=" --save_steps=1000"
+    # command+=" --save_steps=1000"
 
     # Dataset Settings
     command+=" --num_eval=1000"

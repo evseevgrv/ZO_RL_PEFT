@@ -671,8 +671,8 @@ def main():
         args.tag = f"module_perturb-{args.perturbed_module_level}-" + args.tag if args.module_wise_perturbation else args.tag
     
     args.run_name = args.tag
-    args.output_dir = f"result/{args.tag}"
-    args.result_file = f"result/{args.tag}/results.json"
+    if args.output_dir == "trainer_output":
+        args.output_dir = f"result/{args.tag}"
     os.makedirs(args.output_dir, exist_ok=True)
     args.logging_dir = os.path.join(args.output_dir, "logs")
     os.makedirs(args.logging_dir, exist_ok=True)
@@ -693,6 +693,15 @@ def main():
             run_tag=args.tag,
             primary_eval_metric=getattr(task, "metric_name", None),
         )
+
+    if args.result_file is None:
+        if args.log_to_file:
+            args.result_file = os.path.join(
+                args.log_run_dir,
+                f"{args.tag}__results.json",
+            )
+        else:
+            args.result_file = os.path.join(args.output_dir, "results.json")
 
     # This function samples both training and validation samples. The validation (dev) samples are also stored in "train_sets"
     # Later the train_samples and dev_samples are separated
