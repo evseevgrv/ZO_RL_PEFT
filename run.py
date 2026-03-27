@@ -134,6 +134,8 @@ class OurArguments(TrainingArguments):
     ## - zo_conserv: zeroth-order SGD conservative training
     ## - zo_adam: zeroth-order Adam training
     ## - zo_adamu: zeroth-order AdaMU training
+    ## - hizoo: Hessian-informed zeroth-order training
+    ## - mezo_svrg: variance-reduced zeroth-order training
     ## - zo_sign_opt: zeroth-order sign sgd training
     ## - forward_grad: forward gradient
     optimizer: str = "adamw"
@@ -246,6 +248,10 @@ class OurArguments(TrainingArguments):
     adamu_t1: Optional[int] = None
     adamu_t2: Optional[int] = None
     adamu_t3: Optional[int] = None
+    hizoo_hessian_smooth_type: str = "constant1e-8"
+    mezo_svrg_q: int = 2
+    mezo_svrg_full_lr: Optional[float] = None
+    mezo_svrg_fullbatch_size: Optional[int] = None
 
     # Local file logging
     log_to_file: bool = False  # whether to write training logs and live PDF charts locally
