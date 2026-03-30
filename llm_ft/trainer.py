@@ -596,6 +596,36 @@ class OurTrainer(Trainer):
                 matrix_sampling_type=args.matrix_sampling_type,
                 hessian_smooth_type=args.hizoo_hessian_smooth_type,
             )
+        elif args.trainer == "hizoo_rl":
+            if args.use_grad_first:
+                logger.info("Computing initial gradients for mu0 initialization")
+                first_batch = next(iter(train_dataloader))
+                first_batch = self._prepare_inputs(first_batch)
+                self.model.train()
+                with self.compute_loss_context_manager():
+                    loss = self.compute_loss(self.model, first_batch)
+                if self.args.n_gpu > 1:
+                    loss = loss.mean()
+                loss.backward()
+            self.optimizer = HiZOO_RL(
+                params=params,
+                lr=args.learning_rate,
+                eps=args.zo_eps,
+                weight_decay=args.weight_decay,
+                perturbation_mode=args.perturbation_mode,
+                tensor_sampling_type=args.tensor_sampling_type,
+                matrix_sampling_type=args.matrix_sampling_type,
+                hessian_smooth_type=args.hizoo_hessian_smooth_type,
+                variance=args.variance,
+                lr_mu=args.lr_mu,
+                use_grad_first=args.use_grad_first,
+                k=args.k_value,
+            )
+            if hasattr(args, 'log_to_file') and args.log_to_file:
+                log_dir = getattr(args, 'log_run_dir', None) or getattr(args, 'log_dir', None) or "logs"
+                def optimizer_log_func(metrics_dict, step):
+                    _log_to_file_if_enabled(metrics_dict, step=step, log_dir=log_dir)
+                set_optimizer_log_func(optimizer_log_func)
         elif args.trainer == "zo_rl_adamm":
             self.optimizer = ZO_RL_AdaMM(
                 params=params, 

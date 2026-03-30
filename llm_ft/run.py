@@ -182,6 +182,7 @@ class OurArguments(TrainingArguments):
     ## - zo_adam: zeroth-order Adam training
     ## - zo_adamu: zeroth-order AdaMU training
     ## - hizoo: Hessian-informed zeroth-order training
+    ## - hizoo_rl: RL-style Hessian-informed zeroth-order training
     ## - zo_sign_opt: zeroth-order sign sgd training
     ## - forward_grad: forward gradient
     optimizer: str = "adamw"
@@ -774,7 +775,7 @@ def main():
     # Only auto-generate tag if not provided (empty string)
     if not args.tag:
         args.tag = f"{args.trainer}-{args.task_name}-{args.template_ver}-{args.model_name.split('/')[-1]}-OPTIM_{args.mode}-STEP{args.max_steps}-{args.optimizer}-LR{args.learning_rate}-{args.scheduler}-ZOEPS{args.zo_eps}-Q{args.q}-MATRXSAMPLING{args.matrix_sampling_type}-TENSORSAMPLING{args.tensor_sampling_type}"
-        if args.trainer == "zo_rl" or args.trainer == "zo_rl_sgd" or args.trainer == "zo_rl_adamm":
+        if args.trainer == "zo_rl" or args.trainer == "zo_rl_sgd" or args.trainer == "zo_rl_adamm" or args.trainer == "hizoo_rl":
             args.tag = f"{args.trainer}-{args.model_name.split('/')[-1]}-OPTIM_{args.mode}-{args.task_name}-LR{args.learning_rate}-LR_mu{args.lr_mu}-K{args.k_value}"
         args.tag = "momen" + args.tag if args.momentum > 0 else args.tag
         args.tag = f"sparse_grad-{args.gradient_sparsity}-{args.sparse_gradient_group}-{args.sparse_gradient_resample_steps}-" + args.tag if args.gradient_sparsity is not None else args.tag
