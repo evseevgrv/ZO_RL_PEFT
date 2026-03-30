@@ -635,20 +635,44 @@ class OurTrainer(Trainer):
             if not has_length(train_dataloader.dataset):
                 raise ValueError("MeZO-SVRG requires a sized train dataset")
 
-            full_batch_size = args.mezo_svrg_fullbatch_size
-            if full_batch_size is None:
+            if args.mezo_svrg_exact_fullbatch:
                 full_batch_size = len(train_dataloader.dataset)
-            full_batch_size = max(1, min(len(train_dataloader.dataset), full_batch_size))
+            else:
+                full_batch_size = max(
+                    1,
+                    min(len(train_dataloader.dataset), args.mezo_svrg_fullbatch_size),
+                )
 
             mezo_svrg_full_batch_loader = DataLoader(
                 train_dataloader.dataset,
                 batch_size=full_batch_size,
-                shuffle=full_batch_size < len(train_dataloader.dataset),
+                shuffle=(not args.mezo_svrg_exact_fullbatch)
+                and full_batch_size < len(train_dataloader.dataset),
                 collate_fn=train_dataloader.collate_fn,
                 drop_last=False,
                 num_workers=0,
                 pin_memory=getattr(train_dataloader, "pin_memory", False),
             )
+            logger.info(
+                "MeZO-SVRG control-variate batch size = %s (%s mode)",
+                full_batch_size,
+                "exact-fullbatch" if args.mezo_svrg_exact_fullbatch else "large-batch approximation",
+            )
+            if (
+                not args.load_bfloat16
+                and any(
+                    model_key in args.model_name.lower()
+                    for model_key in ("opt", "gpt", "llama", "mistral")
+                )
+            ):
+                logger.warning(
+                    "MeZO-SVRG on large autoregressive models is safer with --load_bfloat16."
+                )
+            if os.environ.get("PYTORCH_CUDA_ALLOC_CONF") is None:
+                logger.info(
+                    "Optional fragmentation mitigation: set "
+                    "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True,max_split_size_mb:128"
+                )
 
         for epoch in range(epochs_trained, num_train_epochs):
             print(f"-------------------------- Training Epoch {epoch} --------------------------")

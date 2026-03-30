@@ -251,7 +251,8 @@ class OurArguments(TrainingArguments):
     hizoo_hessian_smooth_type: str = "constant1e-8"
     mezo_svrg_q: int = 2
     mezo_svrg_full_lr: Optional[float] = None
-    mezo_svrg_fullbatch_size: Optional[int] = None
+    mezo_svrg_fullbatch_size: int = 64
+    mezo_svrg_exact_fullbatch: bool = False
 
     # Local file logging
     log_to_file: bool = False  # whether to write training logs and live PDF charts locally

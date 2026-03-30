@@ -41,11 +41,11 @@ class MeZO_SVRG(ZeroOrderOptimizer):
             for p in group["params"]:
                 state = self.state[p]
                 state["step"] = 0
-                state["snapshot_param"] = torch.zeros_like(
-                    p, memory_format=torch.preserve_format
+                state["snapshot_param_cpu"] = torch.zeros_like(
+                    p, device="cpu", memory_format=torch.preserve_format
                 )
-                state["full_grad"] = torch.zeros_like(
-                    p, memory_format=torch.preserve_format
+                state["full_grad_cpu"] = torch.zeros_like(
+                    p, device="cpu", memory_format=torch.preserve_format
                 )
 
     @staticmethod
@@ -54,11 +54,23 @@ class MeZO_SVRG(ZeroOrderOptimizer):
             return loss.detach().float().item()
         return float(loss)
 
-    def _sample_direction(self, param: torch.Tensor) -> torch.Tensor:
+    def _make_local_generator(self, seed: int) -> torch.Generator:
+        generator_device = getattr(
+            self.generator,
+            "device",
+            torch.device("cuda" if torch.cuda.is_available() else "cpu"),
+        )
+        local_generator = torch.Generator(device=generator_device)
+        local_generator.manual_seed(seed)
+        return local_generator
+
+    def _sample_direction(
+        self, param: torch.Tensor, generator: Optional[torch.Generator] = None
+    ) -> torch.Tensor:
         tensor_sampling_type = self.state[param]["tensor_sampling_type"]
         z = self.tensor_sampler.sample(
             param.shape,
-            generator=self.generator,
+            generator=self.generator if generator is None else generator,
             sampler_type=tensor_sampling_type,
         )
         return z.to(param.device, dtype=param.dtype)
@@ -70,87 +82,99 @@ class MeZO_SVRG(ZeroOrderOptimizer):
                 z = self._sample_direction(p)
                 p.data.add_(z, alpha=eps * scaling_factor)
 
-    def _estimate_gradient(self, closure) -> tuple[Dict[torch.Tensor, torch.Tensor], Any]:
-        self.zo_random_seed = np.random.randint(1_000_000_000)
+    def _estimate_projected_grad(self, closure) -> tuple[float, int, Any]:
+        random_seed = np.random.randint(1_000_000_000)
 
-        self.generator.manual_seed(self.zo_random_seed)
+        self.generator.manual_seed(random_seed)
         self._perturb_parameters_with_seed(scaling_factor=1.0)
         loss_plus = closure()
 
-        self.generator.manual_seed(self.zo_random_seed)
+        self.generator.manual_seed(random_seed)
         self._perturb_parameters_with_seed(scaling_factor=-2.0)
         loss_minus = closure()
 
-        self.generator.manual_seed(self.zo_random_seed)
+        self.generator.manual_seed(random_seed)
         self._perturb_parameters_with_seed(scaling_factor=1.0)
 
         loss_plus_value = self._loss_to_float(loss_plus)
         loss_minus_value = self._loss_to_float(loss_minus)
-        grad_scale = (loss_plus_value - loss_minus_value) / 2.0
-        self.projected_grad = grad_scale
+        projected_grad = (loss_plus_value - loss_minus_value) / 2.0
+        self.projected_grad = projected_grad
+        return projected_grad, random_seed, loss_plus
 
-        estimator = {}
-        self.generator.manual_seed(self.zo_random_seed)
-        for group in self.param_groups:
-            eps = group["eps"]
-            for p in group["params"]:
-                z = self._sample_direction(p)
-                estimator[p] = z * (grad_scale / eps)
-
-        return estimator, loss_plus
-
-    def _capture_current_parameters(self) -> Dict[torch.Tensor, torch.Tensor]:
-        current_params = {}
+    def _capture_current_parameters_cpu(self) -> Dict[torch.Tensor, torch.Tensor]:
+        current_params_cpu = {}
         for group in self.param_groups:
             for p in group["params"]:
-                current_params[p] = p.data.detach().clone(
-                    memory_format=torch.preserve_format
+                current_params_cpu[p] = p.data.detach().to(
+                    device="cpu", copy=True, memory_format=torch.preserve_format
                 )
-        return current_params
+        return current_params_cpu
 
     def _load_parameter_values(self, parameter_values: Dict[torch.Tensor, torch.Tensor]) -> None:
         for group in self.param_groups:
             for p in group["params"]:
-                p.data.copy_(parameter_values[p])
+                p.data.copy_(parameter_values[p].to(device=p.device, dtype=p.dtype))
 
     def _load_snapshot_parameters(self) -> None:
         for group in self.param_groups:
             for p in group["params"]:
-                p.data.copy_(self.state[p]["snapshot_param"])
+                p.data.copy_(self.state[p]["snapshot_param_cpu"].to(device=p.device, dtype=p.dtype))
 
-    def _store_snapshot_and_full_grad(
-        self, full_grad: Dict[torch.Tensor, torch.Tensor]
+    def _store_snapshot_and_full_grad_cpu(
+        self, projected_grad: float, random_seed: int
     ) -> None:
+        local_generator = self._make_local_generator(random_seed)
         for group in self.param_groups:
+            eps = group["eps"]
             for p in group["params"]:
                 state = self.state[p]
-                state["snapshot_param"].copy_(p.data)
-                state["full_grad"].copy_(full_grad[p])
+                state["snapshot_param_cpu"].copy_(p.data.detach().to("cpu"))
+                z = self._sample_direction(p, generator=local_generator)
+                grad = z * (projected_grad / eps)
+                state["full_grad_cpu"].copy_(grad.detach().to("cpu"))
 
-    def _apply_full_batch_update(self, full_grad: Dict[torch.Tensor, torch.Tensor]) -> None:
+    def _apply_full_batch_update(
+        self, projected_grad: float, random_seed: int
+    ) -> None:
+        local_generator = self._make_local_generator(random_seed)
         for group in self.param_groups:
             lr = group["lr"] if self.full_lr is None else self.full_lr
+            eps = group["eps"]
             weight_decay = group["weight_decay"]
             for p in group["params"]:
                 state = self.state[p]
                 state["step"] += 1
-                update = full_grad[p]
+                z = self._sample_direction(p, generator=local_generator)
+                update = z * (projected_grad / eps)
                 if weight_decay is not None and weight_decay != 0:
                     update = update + weight_decay * p.data
                 p.data.add_(update, alpha=-lr)
 
     def _apply_minibatch_update(
         self,
-        curr_grad: Dict[torch.Tensor, torch.Tensor],
-        snapshot_grad: Dict[torch.Tensor, torch.Tensor],
+        projected_grad_curr: float,
+        current_seed: int,
+        projected_grad_snapshot: float,
+        snapshot_seed: int,
     ) -> None:
+        current_generator = self._make_local_generator(current_seed)
+        snapshot_generator = self._make_local_generator(snapshot_seed)
         for group in self.param_groups:
             lr = group["lr"]
+            eps = group["eps"]
             weight_decay = group["weight_decay"]
             for p in group["params"]:
                 state = self.state[p]
                 state["step"] += 1
-                update = curr_grad[p] - snapshot_grad[p] + state["full_grad"]
+                z_curr = self._sample_direction(p, generator=current_generator)
+                z_snapshot = self._sample_direction(p, generator=snapshot_generator)
+                full_grad = state["full_grad_cpu"].to(device=p.device, dtype=p.dtype)
+                update = (
+                    z_curr * (projected_grad_curr / eps)
+                    - z_snapshot * (projected_grad_snapshot / eps)
+                    + full_grad
+                )
                 if weight_decay is not None and weight_decay != 0:
                     update = update + weight_decay * p.data
                 p.data.add_(update, alpha=-lr)
@@ -176,15 +200,20 @@ class MeZO_SVRG(ZeroOrderOptimizer):
         if is_full_step:
             if full_closure is None:
                 raise ValueError("MeZO-SVRG full steps require a full-batch closure")
-            full_grad, loss = self._estimate_gradient(full_closure)
-            self._store_snapshot_and_full_grad(full_grad)
-            self._apply_full_batch_update(full_grad)
+            projected_grad, random_seed, loss = self._estimate_projected_grad(full_closure)
+            self._store_snapshot_and_full_grad_cpu(projected_grad, random_seed)
+            self._apply_full_batch_update(projected_grad, random_seed)
             return loss
 
-        curr_grad, loss = self._estimate_gradient(mini_closure)
-        current_params = self._capture_current_parameters()
+        projected_grad_curr, current_seed, loss = self._estimate_projected_grad(mini_closure)
+        current_params = self._capture_current_parameters_cpu()
         self._load_snapshot_parameters()
-        snapshot_grad, _ = self._estimate_gradient(mini_closure)
+        projected_grad_snapshot, snapshot_seed, _ = self._estimate_projected_grad(mini_closure)
         self._load_parameter_values(current_params)
-        self._apply_minibatch_update(curr_grad, snapshot_grad)
+        self._apply_minibatch_update(
+            projected_grad_curr,
+            current_seed,
+            projected_grad_snapshot,
+            snapshot_seed,
+        )
         return loss
