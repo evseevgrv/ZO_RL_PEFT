@@ -47,8 +47,8 @@ To train and evaluate the model in the paper, run this command:
     </td>
   </tr>
   <tr>
-    <td align="center">ZO-RL-SGD</td>
-    <td align="center">ZO-RL-Adamm</td>
-    <td align="center">ZO-RL-Jaguar</td>
+    <td align="center">ZO-SGD</td>
+    <td align="center">ZO-Adamm</td>
+    <td align="center">JAGUAR</td>
   </tr>
 </table>
