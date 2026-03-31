@@ -38,9 +38,10 @@ class ZeroOrderOptimizer(Optimizer, ABC):
 
         self.state = defaultdict(dict)
 
-        self.generator = torch.Generator(device=device)
+        generator_device = self._resolve_generator_device(device)
+        self.generator = torch.Generator(device=generator_device)
 
-        self.tensor_sampler = TensorSampler(tensor_sampling_type, device=device)
+        self.tensor_sampler = TensorSampler(tensor_sampling_type, device=generator_device)
         print(f"tensor_sampler: {self.tensor_sampler}")
 
         self.perturbation_mode = perturbation_mode
@@ -51,6 +52,20 @@ class ZeroOrderOptimizer(Optimizer, ABC):
                     self.state[p]['tensor_sampling_type'] = tensor_sampling_type
                 elif p.ndim >= 2:
                      self.state[p]['tensor_sampling_type'] = matrix_sampling_type if matrix_sampling_type is not None else tensor_sampling_type
+
+    def _resolve_generator_device(self, fallback_device: str) -> str:
+        for group in self.param_groups:
+            for p in group['params']:
+                param_device = p.device.type
+                if param_device == "cuda" and not torch.cuda.is_available():
+                    return "cpu"
+                if param_device in {"cpu", "cuda"}:
+                    return param_device
+                return "cpu"
+
+        if fallback_device == "cuda" and not torch.cuda.is_available():
+            return "cpu"
+        return fallback_device
 
 
     def _validate_hyperparameters(self):

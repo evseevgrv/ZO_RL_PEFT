@@ -14,6 +14,7 @@ class ZO_AdaMM(ZeroOrderOptimizer):
             matrix_sampling_type: str = None, 
             perturbation_mode: str = "two_side",
             betas: Tuple[float, float] = (0.9, 0.999),
+            k: int = 1,
     ):
         super().__init__(
             params,
@@ -24,6 +25,7 @@ class ZO_AdaMM(ZeroOrderOptimizer):
             matrix_sampling_type=matrix_sampling_type,
             perturbation_mode=perturbation_mode,
         )
+        self.k = max(1, k)
         
         for group in self.param_groups:
             group['betas'] = betas
@@ -36,40 +38,51 @@ class ZO_AdaMM(ZeroOrderOptimizer):
 
     @torch.no_grad()
     def step(self, closure=None):
-        loss1, loss2 = None, None 
-        
-        self.zo_random_seed = np.random.randint(1_000_000_000)
+        loss_plus_values = []
+        projected_grads = []
+        probe_seeds = []
+        grad_sums = {}
 
-        self.generator.manual_seed(self.zo_random_seed)
-        self._mu_pertrub(scaling_factor=1)
-        loss1 = closure()
+        for group in self.param_groups:
+            for p in group['params']:
+                grad_sums[p] = torch.zeros_like(p, memory_format=torch.preserve_format)
 
-        self.generator.manual_seed(self.zo_random_seed)
-        self._mu_pertrub(scaling_factor=-2)
-        loss2 = closure()
-        
-        self.projected_grad = (loss1 - loss2) / 2
+        for _ in range(self.k):
+            seed = np.random.randint(1_000_000_000)
+            probe_seeds.append(seed)
+            self.zo_random_seed = seed
 
-        # Restore parameters to original state (undo perturbations)
-        self.generator.manual_seed(self.zo_random_seed)
-        self._mu_pertrub(scaling_factor=1)
+            self.generator.manual_seed(seed)
+            self._mu_pertrub(scaling_factor=1)
+            loss_plus = closure()
+            loss_plus_values.append(loss_plus)
 
-        self.generator.manual_seed(self.zo_random_seed)
+            self.generator.manual_seed(seed)
+            self._mu_pertrub(scaling_factor=-2)
+            loss_minus = closure()
+
+            projected_grads.append((loss_plus - loss_minus) / 2)
+
+            self.generator.manual_seed(seed)
+            self._mu_pertrub(scaling_factor=1)
+
+        self.projected_grad = torch.stack(projected_grads).mean()
+
+        for seed, projected_grad in zip(probe_seeds, projected_grads):
+            self.generator.manual_seed(seed)
+            for group in self.param_groups:
+                eps = group['eps']
+                for p in group['params']:
+                    z = torch.normal(mean=0, std=1, size=p.shape, device=p.device, generator=self.generator)
+                    grad_sums[p].add_(z * (projected_grad / (eps * self.k)))
+
         for group in self.param_groups:
             beta1, beta2 = group['betas']
-            eps = group['eps']
             lr = group['lr']
             for p in group['params']:
                 state = self.state[p]
                 state['step'] += 1
-                
-                # z = torch.normal(mean=0, std=1, size=p.shape, device=p.device, generator=self.generator)
-                # z = state['z']
-                
-                # seed = state['seed'] 
-                # self.generator.manual_seed(seed)
-                z = torch.normal(mean=0, std=1, size=p.shape, device=p.device, generator=self.generator)
-                grad = (z * self.projected_grad) / eps
+                grad = grad_sums[p]
     
                 # Do the AdaMM updates
                 state['exp_avg'].mul_(beta1).add_(grad, alpha=(1.0 - beta1))
@@ -81,7 +94,7 @@ class ZO_AdaMM(ZeroOrderOptimizer):
                 # Add small epsilon for numerical stability (separate from perturbation eps)
                 p.data.addcdiv_(state['exp_avg'], state['max_exp_avg_sq'].sqrt().add_(1e-10), value=(-lr))
 
-        return loss1
+        return torch.stack(loss_plus_values).mean()
     
     def _mu_pertrub(self, scaling_factor: float = 1.0):
         for group in self.param_groups:

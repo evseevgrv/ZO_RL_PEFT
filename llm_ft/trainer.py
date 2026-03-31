@@ -87,6 +87,7 @@ from transformers.utils import (
 import wandb
 # from clearml import Task
 from training_utils import * 
+from k_utils import resolve_k_value
 
 from gradient_pruning.pruning_utils import (
     fast_random_mask_like,
@@ -462,19 +463,20 @@ class OurTrainer(Trainer):
             'momentum': args.momentum,
             'eps': args.zo_eps,
         }
+        effective_k = resolve_k_value(args.trainer, args.k_value)
 
         params = [p for p in self.model.parameters() if p.requires_grad]
 
         if args.trainer == "zo_adam":
             self.optimizer = ZO_Adam(params, lr=args.learning_rate, eps=args.zo_eps, momentum=args.momentum, perturbation_mode=args.perturbation_mode, tensor_sampling_type=args.tensor_sampling_type, matrix_sampling_type=args.matrix_sampling_type)
         elif args.trainer == "zo_sgd":
-            self.optimizer = ZO_SGD(params, lr=args.learning_rate, eps=args.zo_eps, momentum=args.momentum, perturbation_mode=args.perturbation_mode, tensor_sampling_type=args.tensor_sampling_type, matrix_sampling_type=args.matrix_sampling_type)
+            self.optimizer = ZO_SGD(params, lr=args.learning_rate, eps=args.zo_eps, momentum=args.momentum, perturbation_mode=args.perturbation_mode, tensor_sampling_type=args.tensor_sampling_type, matrix_sampling_type=args.matrix_sampling_type, k=effective_k)
         elif args.trainer == "zo_signsgd":
             self.optimizer = ZO_SignSGD(params, lr=args.learning_rate, eps=args.zo_eps, momentum=args.momentum, perturbation_mode=args.perturbation_mode, tensor_sampling_type=args.tensor_sampling_type, matrix_sampling_type=args.matrix_sampling_type)
         elif args.trainer == "zo_conserv":
             self.optimizer = ZO_Conserv(params, lr=args.learning_rate, eps=args.zo_eps, momentum=args.momentum, perturbation_mode=args.perturbation_mode, tensor_sampling_type=args.tensor_sampling_type, matrix_sampling_type=args.matrix_sampling_type)
         elif args.trainer == "jaguar_signsgd":
-            self.optimizer = Jaguar_SignSGD(params, lr=args.learning_rate, eps=args.zo_eps, beta=args.zo_beta, perturbation_mode=args.perturbation_mode, tensor_sampling_type=args.tensor_sampling_type, matrix_sampling_type=args.matrix_sampling_type)
+            self.optimizer = Jaguar_SignSGD(params, lr=args.learning_rate, eps=args.zo_eps, beta=args.zo_beta, perturbation_mode=args.perturbation_mode, tensor_sampling_type=args.tensor_sampling_type, matrix_sampling_type=args.matrix_sampling_type, k=effective_k)
         elif args.trainer == "zo_muon":
             self.optimizer = ZO_MUON(params, lr=args.learning_rate, eps=args.zo_eps, perturbation_mode=args.perturbation_mode, tensor_sampling_type=args.tensor_sampling_type, matrix_sampling_type=args.matrix_sampling_type)
         elif args.trainer == "zo_sampling_muon":
@@ -505,7 +507,7 @@ class OurTrainer(Trainer):
                 tensor_sampling_type=args.tensor_sampling_type,
                 matrix_sampling_type=args.matrix_sampling_type,
                 params_ratio=args.params_ratio,
-                k=args.k_value, 
+                k=effective_k, 
                 variance=args.variance, 
                 lr_mu=args.lr_mu, 
                 use_grad_first=args.use_grad_first
@@ -542,7 +544,7 @@ class OurTrainer(Trainer):
                 tensor_sampling_type=args.tensor_sampling_type,
                 matrix_sampling_type=args.matrix_sampling_type,
                 perturbation_mode=args.perturbation_mode,
-                k=args.k_value, 
+                k=effective_k, 
                 variance=args.variance, 
                 lr_mu=args.lr_mu, 
                 use_grad_first=args.use_grad_first
@@ -561,7 +563,8 @@ class OurTrainer(Trainer):
                 betas=(args.beta1, args.beta2), 
                 perturbation_mode=args.perturbation_mode, 
                 tensor_sampling_type=args.tensor_sampling_type, 
-                matrix_sampling_type=args.matrix_sampling_type
+                matrix_sampling_type=args.matrix_sampling_type,
+                k=effective_k,
             )
         elif args.trainer == "zo_adamu":
             total_steps = max(
@@ -619,7 +622,7 @@ class OurTrainer(Trainer):
                 variance=args.variance,
                 lr_mu=args.lr_mu,
                 use_grad_first=args.use_grad_first,
-                k=args.k_value,
+                k=effective_k,
             )
             if hasattr(args, 'log_to_file') and args.log_to_file:
                 log_dir = getattr(args, 'log_run_dir', None) or getattr(args, 'log_dir', None) or "logs"
@@ -638,7 +641,7 @@ class OurTrainer(Trainer):
                 variance=args.variance,
                 lr_mu=args.lr_mu,
                 use_grad_first=args.use_grad_first,
-                k=args.k_value
+                k=effective_k
             )
             # Set logging function for optimizer if file logging is enabled
             if hasattr(args, 'log_to_file') and args.log_to_file:

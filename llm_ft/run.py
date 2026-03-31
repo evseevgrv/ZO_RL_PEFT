@@ -23,6 +23,7 @@ from models.modeling_mistral import (
 )
 from tasks.tasks import get_task
 from trainer import OurTrainer
+from k_utils import resolve_k_value
 from utils import *
 
 os.environ["TRANSFORMERS_CACHE"] = "./cache"
@@ -287,7 +288,7 @@ class OurArguments(TrainingArguments):
 
     params_ratio: float = 0.1
 
-    k_value: int = 10 
+    k_value: int = None
     variance: float = 1e-3
     lr_mu: float = None 
     use_grad_first: bool = False
@@ -771,6 +772,8 @@ def main():
         args.mode = "prompt"
     else:
         args.mode = "ft"
+
+    args.k_value = resolve_k_value(args.trainer, args.k_value)
     
     # Only auto-generate tag if not provided (empty string)
     if not args.tag:
