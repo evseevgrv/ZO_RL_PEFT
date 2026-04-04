@@ -599,6 +599,18 @@ class OurTrainer(Trainer):
                 matrix_sampling_type=args.matrix_sampling_type,
                 hessian_smooth_type=args.hizoo_hessian_smooth_type,
             )
+        elif args.trainer == "mezo_svrg":
+            self.optimizer = MeZO_SVRG(
+                params=params,
+                lr=args.learning_rate,
+                eps=args.zo_eps,
+                weight_decay=args.weight_decay,
+                perturbation_mode=args.perturbation_mode,
+                tensor_sampling_type=args.tensor_sampling_type,
+                matrix_sampling_type=args.matrix_sampling_type,
+                q=args.mezo_svrg_q,
+                full_lr=args.mezo_svrg_full_lr,
+            )
         elif args.trainer == "hizoo_rl":
             if args.use_grad_first:
                 logger.info("Computing initial gradients for mu0 initialization")
@@ -767,6 +779,52 @@ class OurTrainer(Trainer):
             self.gradient_sparsity = compute_named_parameters_to_sparsity(model, threshold)
             print(f"### global gradient sparsity, weight magnitude threshold = {threshold}")
 
+        mezo_svrg_full_batch_loader = None
+        if args.trainer == "mezo_svrg":
+            if not hasattr(train_dataloader, "dataset") or train_dataloader.dataset is None:
+                raise ValueError("MeZO-SVRG requires access to the train dataset")
+            if not has_length(train_dataloader.dataset):
+                raise ValueError("MeZO-SVRG requires a sized train dataset")
+
+            if args.mezo_svrg_exact_fullbatch:
+                full_batch_size = len(train_dataloader.dataset)
+            else:
+                full_batch_size = max(
+                    1,
+                    min(len(train_dataloader.dataset), args.mezo_svrg_fullbatch_size),
+                )
+
+            mezo_svrg_full_batch_loader = DataLoader(
+                train_dataloader.dataset,
+                batch_size=full_batch_size,
+                shuffle=(not args.mezo_svrg_exact_fullbatch)
+                and full_batch_size < len(train_dataloader.dataset),
+                collate_fn=train_dataloader.collate_fn,
+                drop_last=False,
+                num_workers=0,
+                pin_memory=getattr(train_dataloader, "pin_memory", False),
+            )
+            logger.info(
+                "MeZO-SVRG control-variate batch size = %s (%s mode)",
+                full_batch_size,
+                "exact-fullbatch" if args.mezo_svrg_exact_fullbatch else "large-batch approximation",
+            )
+            if (
+                not args.load_bfloat16
+                and any(
+                    model_key in args.model_name.lower()
+                    for model_key in ("opt", "gpt", "llama", "mistral")
+                )
+            ):
+                logger.warning(
+                    "MeZO-SVRG on large autoregressive models is safer with --load_bfloat16."
+                )
+            if os.environ.get("PYTORCH_CUDA_ALLOC_CONF") is None:
+                logger.info(
+                    "Optional fragmentation mitigation: set "
+                    "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True,max_split_size_mb:128"
+                )
+
         for epoch in range(epochs_trained, num_train_epochs):
             print(f"-------------------------- Training Epoch {epoch} --------------------------")
             if isinstance(train_dataloader, DataLoader) and isinstance(train_dataloader.sampler, DistributedSampler):
@@ -821,7 +879,14 @@ class OurTrainer(Trainer):
                 if step % args.gradient_accumulation_steps == 0:
                     self.control = self.callback_handler.on_step_begin(args, self.state, self.control)
 
-                closure = self.create_closure(model, inputs)
+                if args.trainer == "mezo_svrg":
+                    closure = self.create_mezo_svrg_closure(
+                        model,
+                        inputs,
+                        mezo_svrg_full_batch_loader,
+                    )
+                else:
+                    closure = self.create_closure(model, inputs)
                 tr_loss_step = self.optimizer.step(closure)     
                 self.lr_scheduler.step()
                 # print(f"Step {total_steps}, LR: {self.optimizer.param_groups[0]['lr']}")
@@ -1000,6 +1065,15 @@ class OurTrainer(Trainer):
         def closure(): return self.zo_forward(model, inputs)
         
         return closure
+
+    def create_mezo_svrg_closure(self, model, inputs, full_batch_loader):
+        mini_closure = self.create_closure(model, inputs)
+
+        def full_closure():
+            full_inputs = next(iter(full_batch_loader))
+            return self.zo_forward(model, full_inputs)
+
+        return {"mini": mini_closure, "full": full_closure}
 
     def zo_forward(self, model, inputs):
         """
