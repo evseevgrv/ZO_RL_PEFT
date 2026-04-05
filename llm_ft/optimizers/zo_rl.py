@@ -80,6 +80,8 @@ class ZO_RL(ZeroOrderOptimizer):
             for param in group['params']:    
                 state = self.state[param]
                 state['step'] += 1
+                if 'perturbation_z' in state:
+                    del state['perturbation_z']
 
         # Step 1: Try k random seeds and evaluate each
         e_values = {}
@@ -105,41 +107,28 @@ class ZO_RL(ZeroOrderOptimizer):
         self.zo_random_seed = optimal_seed
         
         # Step 3: Use optimal seed for two-sided finite difference
-        # First, save the z values used for perturbation (same as sparse_jaguar_signsgd)
-        self.generator.manual_seed(self.zo_random_seed)
         # Select parameters for perturbation (same logic as sparse_jaguar_signsgd)
+        self.generator.manual_seed(self.zo_random_seed)
         n = max(1, int(len(self.all_params) * self.params_ratio))
         param_indices = torch.randperm(len(self.all_params), device=self.all_params[0].device, generator=self.generator)[:n]
         self.generator.manual_seed(self.zo_random_seed)
         selected_param_ids = {id(self.all_params[idx]) for idx in param_indices}
         
-        # Save z values for selected parameters (will be reused for gradient accumulation)
-        for group in self.param_groups:
-            for param in group['params']:
-                if id(param) in selected_param_ids:
-                    state = self.state[param]
-                    mu = state['mu']
-                    device = param.device
-                    # Sample z and save it (same z will be used for gradient accumulation)
-                    self.generator.manual_seed(self.zo_random_seed)
-                    z = torch.normal(mean=mu, std=self.variance, generator=self.generator).to(device)
-                    state['perturbation_z'] = z.clone()
-        
-        # Now apply perturbation with saved z
+        # Now apply perturbation with deterministically re-sampled z
         self.generator.manual_seed(self.zo_random_seed)
-        self._sparse_mu_perturb_with_saved_z(scaling_factor=1.0, selected_param_ids=selected_param_ids)
+        self._sparse_mu_perturb_with_seed(scaling_factor=1.0, selected_param_ids=selected_param_ids, seed=self.zo_random_seed)
         
         if closure is not None:
             loss1 = closure()
         
         self.generator.manual_seed(self.zo_random_seed)
-        self._sparse_mu_perturb_with_saved_z(scaling_factor=-2.0, selected_param_ids=selected_param_ids)
+        self._sparse_mu_perturb_with_seed(scaling_factor=-2.0, selected_param_ids=selected_param_ids, seed=self.zo_random_seed)
         
         if closure is not None:
             loss2 = closure()
         
         self.generator.manual_seed(self.zo_random_seed)
-        self._sparse_mu_perturb_with_saved_z(scaling_factor=1.0, selected_param_ids=selected_param_ids)
+        self._sparse_mu_perturb_with_seed(scaling_factor=1.0, selected_param_ids=selected_param_ids, seed=self.zo_random_seed)
         
         # Step 4: Compute gradient approximation
         projected_grad = self.grad_approx(loss_plus=loss1, loss_minus=loss2, perturbation_mode="two_side")
@@ -174,8 +163,7 @@ class ZO_RL(ZeroOrderOptimizer):
                     mu = state['mu']
                     
                     # OPTIMIZE X - use the SAME z that was used for perturbation (like sparse_jaguar_signsgd)
-                    self.generator.manual_seed(self.zo_random_seed)
-                    z = state['perturbation_z']  # Reuse the same z from perturbation
+                    z = self._sample_mu_noise(mu, seed=self.zo_random_seed, device=device)
                     grad_final = z * projected_grad / eps
                     state['grad_accum'].mul_(beta).add_(grad_final, alpha=(1.0 - beta))
                     
@@ -260,22 +248,29 @@ class ZO_RL(ZeroOrderOptimizer):
                     device = param.device
                     
                     # Sample from normal distribution with mean=mu and std=variance
-                    self.generator.manual_seed(self.zo_random_seed)
-                    z = torch.normal(mean=mu, std=self.variance, generator=self.generator).to(device)
+                    z = self._sample_mu_noise(mu, seed=self.zo_random_seed, device=device)
                     param.data.add_(z * eps * scaling_factor)
     
-    def _sparse_mu_perturb_with_saved_z(self, scaling_factor=1.0, selected_param_ids=None):
+    def _sample_mu_noise(self, mu: torch.Tensor, seed: int, device: torch.device) -> torch.Tensor:
+        """Deterministically sample z ~ N(mu, variance) using the provided seed."""
+        self.generator.manual_seed(seed)
+        return torch.normal(mean=mu, std=self.variance, generator=self.generator).to(device)
+
+    def _sparse_mu_perturb_with_seed(self, scaling_factor=1.0, selected_param_ids=None, seed: Optional[int] = None):
         """
-        Sparse perturbation using pre-saved z values (for two-sided finite difference).
+        Sparse perturbation with deterministically re-sampled z (for two-sided finite difference).
         This ensures the same z is used for perturbation and gradient accumulation.
         """
+        if selected_param_ids is None:
+            return
+        if seed is None:
+            seed = self.zo_random_seed
         for group in self.param_groups:
             eps = group['eps']
             
             for param in group['params']:
                 if id(param) in selected_param_ids:
                     state = self.state[param]
-                    if 'perturbation_z' in state:
-                        z = state['perturbation_z']
-                        self.generator.manual_seed(self.zo_random_seed)
-                        param.data.add_(z * eps * scaling_factor)
+                    mu = state['mu']
+                    z = self._sample_mu_noise(mu, seed=seed, device=param.device)
+                    param.data.add_(z * eps * scaling_factor)
