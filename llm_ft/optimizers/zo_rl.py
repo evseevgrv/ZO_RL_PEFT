@@ -54,16 +54,16 @@ class ZO_RL(ZeroOrderOptimizer):
                     if param.requires_grad and self.use_grad_first:
                         if param.grad is None:
                             raise ValueError("param.grad is None, but use_grad_first is True")
-                            
+
                         state['mu'] = param.grad.clone()
                     else:
                         state['mu'] = torch.randn_like(
-                            param, 
+                            param,
                             memory_format=torch.preserve_format
                         )
                         state['mu'] /= torch.linalg.norm(state['mu'])
-                        state['mu_old'] = state['mu'].detach().clone()
-                        state['mu_old_norm'] = torch.norm(state['mu_old']).item()**2
+                    state['mu_old'] = state['mu'].detach().clone()
+                    state['mu_old_norm'] = torch.norm(state['mu_old']).item()**2
                         # state['mu'] = torch.zeros_like(
                         #     param, 
                         #     memory_format=torch.preserve_format

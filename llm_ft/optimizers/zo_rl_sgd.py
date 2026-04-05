@@ -42,10 +42,15 @@ class ZO_RL_SGD(ZeroOrderOptimizer):
                 state = self.state[param]
                 state['step'] = 0
 
-                state['mu'] = torch.zeros_like(
-                    param, 
-                    memory_format=torch.preserve_format
-                )
+                if self.use_grad_first:
+                    if param.grad is None:
+                        raise ValueError("param.grad is None, but use_grad_first is True")
+                    state['mu'] = param.grad.detach().clone()
+                else:
+                    state['mu'] = torch.zeros_like(
+                        param,
+                        memory_format=torch.preserve_format
+                    )
                 # state['mu'] = torch.randn_like(
                 #     param, 
                 #     memory_format=torch.preserve_format

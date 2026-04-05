@@ -42,7 +42,12 @@ class ZO_RL_AdaMM(ZeroOrderOptimizer):
                 state['exp_avg_sq'] = torch.zeros_like(p, memory_format=torch.preserve_format)
                 state['max_exp_avg_sq'] = torch.zeros_like(p, memory_format=torch.preserve_format)
 
-                state['mu'] = torch.zeros_like(p, memory_format=torch.preserve_format)
+                if self.use_grad_first:
+                    if p.grad is None:
+                        raise ValueError("param.grad is None, but use_grad_first is True")
+                    state['mu'] = p.grad.detach().clone()
+                else:
+                    state['mu'] = torch.zeros_like(p, memory_format=torch.preserve_format)
                 # state['mu'] = torch.randn_like(
                 #     p, 
                 #     memory_format=torch.preserve_format

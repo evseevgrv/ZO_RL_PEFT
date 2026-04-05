@@ -489,15 +489,7 @@ class OurTrainer(Trainer):
             self.optimizer = Sparse_Jaguar_MUON(params, lr=args.learning_rate, eps=args.zo_eps, beta=args.zo_beta, perturbation_mode=args.perturbation_mode, tensor_sampling_type=args.tensor_sampling_type, matrix_sampling_type=args.matrix_sampling_type, params_ratio=args.params_ratio)
         elif args.trainer == "zo_rl":
             if args.use_grad_first:
-                logger.info("Computing initial gradients for mu0 initialization")
-                first_batch = next(iter(train_dataloader))
-                first_batch = self._prepare_inputs(first_batch)
-                self.model.train()
-                with self.compute_loss_context_manager():
-                    loss = self.compute_loss(self.model, first_batch)
-                if self.args.n_gpu > 1:
-                    loss = loss.mean()
-                loss.backward()
+                self._compute_initial_grads_for_mu(train_dataloader)
             self.optimizer = ZO_RL(
                 params=params, 
                 lr=args.learning_rate, 
@@ -512,6 +504,8 @@ class OurTrainer(Trainer):
                 lr_mu=args.lr_mu, 
                 use_grad_first=args.use_grad_first
             )
+            if args.use_grad_first:
+                self.model.zero_grad(set_to_none=True)
             # Set logging function for optimizer if file logging is enabled
             if hasattr(args, 'log_to_file') and args.log_to_file:
                 log_dir = getattr(args, 'log_run_dir', None) or getattr(args, 'log_dir', None) or "logs"
@@ -526,15 +520,7 @@ class OurTrainer(Trainer):
                 set_optimizer_log_func(optimizer_log_func)
         elif args.trainer == "zo_rl_sgd":
             if args.use_grad_first:
-                logger.info("Computing initial gradients for mu0 initialization")
-                first_batch = next(iter(train_dataloader))
-                first_batch = self._prepare_inputs(first_batch)
-                self.model.train()
-                with self.compute_loss_context_manager():
-                    loss = self.compute_loss(self.model, first_batch)
-                if self.args.n_gpu > 1:
-                    loss = loss.mean()
-                loss.backward()
+                self._compute_initial_grads_for_mu(train_dataloader)
             self.optimizer = ZO_RL_SGD(
                 params=params, 
                 lr=args.learning_rate, 
@@ -549,6 +535,8 @@ class OurTrainer(Trainer):
                 lr_mu=args.lr_mu, 
                 use_grad_first=args.use_grad_first
             )
+            if args.use_grad_first:
+                self.model.zero_grad(set_to_none=True)
             # Set logging function for optimizer if file logging is enabled
             if hasattr(args, 'log_to_file') and args.log_to_file:
                 log_dir = getattr(args, 'log_run_dir', None) or getattr(args, 'log_dir', None) or "logs"
@@ -613,15 +601,7 @@ class OurTrainer(Trainer):
             )
         elif args.trainer == "hizoo_rl":
             if args.use_grad_first:
-                logger.info("Computing initial gradients for mu0 initialization")
-                first_batch = next(iter(train_dataloader))
-                first_batch = self._prepare_inputs(first_batch)
-                self.model.train()
-                with self.compute_loss_context_manager():
-                    loss = self.compute_loss(self.model, first_batch)
-                if self.args.n_gpu > 1:
-                    loss = loss.mean()
-                loss.backward()
+                self._compute_initial_grads_for_mu(train_dataloader)
             self.optimizer = HiZOO_RL(
                 params=params,
                 lr=args.learning_rate,
@@ -636,12 +616,16 @@ class OurTrainer(Trainer):
                 use_grad_first=args.use_grad_first,
                 k=effective_k,
             )
+            if args.use_grad_first:
+                self.model.zero_grad(set_to_none=True)
             if hasattr(args, 'log_to_file') and args.log_to_file:
                 log_dir = getattr(args, 'log_run_dir', None) or getattr(args, 'log_dir', None) or "logs"
                 def optimizer_log_func(metrics_dict, step):
                     _log_to_file_if_enabled(metrics_dict, step=step, log_dir=log_dir)
                 set_optimizer_log_func(optimizer_log_func)
         elif args.trainer == "zo_rl_adamm":
+            if args.use_grad_first:
+                self._compute_initial_grads_for_mu(train_dataloader)
             self.optimizer = ZO_RL_AdaMM(
                 params=params, 
                 lr=args.learning_rate, 
@@ -655,6 +639,8 @@ class OurTrainer(Trainer):
                 use_grad_first=args.use_grad_first,
                 k=effective_k
             )
+            if args.use_grad_first:
+                self.model.zero_grad(set_to_none=True)
             # Set logging function for optimizer if file logging is enabled
             if hasattr(args, 'log_to_file') and args.log_to_file:
                 log_dir = getattr(args, 'log_run_dir', None) or getattr(args, 'log_dir', None) or "logs"
@@ -1126,6 +1112,46 @@ class OurTrainer(Trainer):
             return self.gradient_sparsity
         elif isinstance(self.gradient_sparsity, dict):
             return self.gradient_sparsity[name]
+
+    def _compute_initial_grads_for_mu(self, train_dataloader):
+        logger.info("Computing initial gradients for mu0 initialization")
+        first_batch = next(iter(train_dataloader))
+        first_batch = self._prepare_inputs(first_batch)
+        self.model.train()
+        self.model.zero_grad(set_to_none=True)
+
+        with self.compute_loss_context_manager():
+            loss = self.compute_loss(self.model, first_batch)
+
+        if self.args.n_gpu > 1:
+            loss = loss.mean()  # mean() to average on multi-gpu parallel training
+
+        if self.args.gradient_accumulation_steps > 1 and not self.deepspeed:
+            # deepspeed handles loss scaling by gradient_accumulation_steps in its `backward`
+            loss = loss / self.args.gradient_accumulation_steps
+
+        if self.do_grad_scaling:
+            self.scaler.scale(loss).backward()
+            # Unscale to get the true gradients for mu initialization
+            dummy_optimizer = SGD(self.model.parameters(), lr=0.0)
+            self.scaler.unscale_(dummy_optimizer)
+        elif self.use_apex:
+            dummy_optimizer = SGD(self.model.parameters(), lr=0.0)
+            with amp.scale_loss(loss, dummy_optimizer) as scaled_loss:
+                scaled_loss.backward()
+        elif self.deepspeed:
+            loss = self.deepspeed.backward(loss)
+        else:
+            loss.backward()
+
+        # Sparse gradient (match training_step behavior)
+        self.sparse_grad_rng.manual_seed(self.sparse_grad_random_seed)
+        for name, param in self.model.named_parameters():
+            if not param.requires_grad:
+                continue
+            grad_sparsity = self.get_grad_sparsity_by_name(name)
+            if grad_sparsity is not None and param.grad is not None:
+                param.grad[fast_random_mask_like(param.grad, grad_sparsity, generator=self.sparse_grad_rng)] = 0
 
     def training_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]) -> torch.Tensor:
         """
