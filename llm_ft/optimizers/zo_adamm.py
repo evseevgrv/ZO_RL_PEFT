@@ -15,6 +15,7 @@ class ZO_AdaMM(ZeroOrderOptimizer):
             perturbation_mode: str = "two_side",
             betas: Tuple[float, float] = (0.9, 0.999),
             k: int = 1,
+            evaluate_memory: bool = False,
     ):
         super().__init__(
             params,
@@ -26,6 +27,7 @@ class ZO_AdaMM(ZeroOrderOptimizer):
             perturbation_mode=perturbation_mode,
         )
         self.k = max(1, k)
+        self.evaluate_memory = evaluate_memory
         
         for group in self.param_groups:
             group['betas'] = betas

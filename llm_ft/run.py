@@ -294,6 +294,7 @@ class OurArguments(TrainingArguments):
     variance: float = 1e-3
     lr_mu: float = None 
     use_grad_first: bool = False
+    evaluate_memory: bool = False
     adamu_sigma: float = 1e-8
     adamu_t1: Optional[int] = None
     adamu_t2: Optional[int] = None

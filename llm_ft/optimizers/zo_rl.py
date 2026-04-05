@@ -21,6 +21,7 @@ class ZO_RL(ZeroOrderOptimizer):
             variance: Optional[float] = 1e-3,
             lr_mu: Optional[float] = None,
             use_grad_first: bool = False,
+            evaluate_memory: bool = False,
     ):
         super().__init__(
             params,
@@ -37,6 +38,7 @@ class ZO_RL(ZeroOrderOptimizer):
         self.lr = lr
         self.lr_mu = lr_mu if lr_mu is not None else lr
         self.use_grad_first = use_grad_first
+        self.evaluate_memory = evaluate_memory
         
         for group in self.param_groups:
             group['beta'] = beta
@@ -62,8 +64,9 @@ class ZO_RL(ZeroOrderOptimizer):
                             memory_format=torch.preserve_format
                         )
                         state['mu'] /= torch.linalg.norm(state['mu'])
-                    state['mu_old'] = state['mu'].detach().clone()
-                    state['mu_old_norm'] = torch.norm(state['mu_old']).item()**2
+                    if not self.evaluate_memory:
+                        state['mu_old'] = state['mu'].detach().clone()
+                        state['mu_old_norm'] = torch.norm(state['mu_old']).item()**2
                         # state['mu'] = torch.zeros_like(
                         #     param, 
                         #     memory_format=torch.preserve_format
@@ -152,6 +155,7 @@ class ZO_RL(ZeroOrderOptimizer):
             coeff = torch.zeros_like(f_tensor)  # When k=1, mu update term is zero
 
         
+        track_mu_degree = not self.evaluate_memory
         dot_product = 0 
         old_mu_norms = 0
         new_mu_norms = 0
@@ -184,9 +188,10 @@ class ZO_RL(ZeroOrderOptimizer):
                     
                     g_mu = -mu_diff / (self.k * (self.variance ** 2))
                     state["mu"].add_(g_mu, alpha=-self.lr_mu)
-                    dot_product += torch.sum(state['mu_old'] * state["mu"]).item()
-                    new_mu_norms += torch.norm(state["mu"]).item()**2
-                    old_mu_norms += state['mu_old_norm']
+                    if track_mu_degree:
+                        dot_product += torch.sum(state['mu_old'] * state["mu"]).item()
+                        new_mu_norms += torch.norm(state["mu"]).item()**2
+                        old_mu_norms += state['mu_old_norm']
                     # state["mu"] /= torch.linalg.norm(state["mu"])
                 
                 # SignSGD update (for all parameters)
@@ -222,16 +227,17 @@ class ZO_RL(ZeroOrderOptimizer):
             except (ImportError, AttributeError):
                 pass
 
-        mu_degree = dot_product / (math.sqrt(new_mu_norms) * math.sqrt(old_mu_norms))
-        if wandb.run is not None:
-            wandb.log({"mu_degree": mu_degree})
-        # Log to file if enabled
-        try:
-            from trainer import _optimizer_log_func
-            if _optimizer_log_func is not None and step is not None:
-                _optimizer_log_func({"mu_degree": mu_degree}, step=step)
-        except (ImportError, AttributeError):
-            pass
+        if track_mu_degree:
+            mu_degree = dot_product / (math.sqrt(new_mu_norms) * math.sqrt(old_mu_norms))
+            if wandb.run is not None:
+                wandb.log({"mu_degree": mu_degree})
+            # Log to file if enabled
+            try:
+                from trainer import _optimizer_log_func
+                if _optimizer_log_func is not None and step is not None:
+                    _optimizer_log_func({"mu_degree": mu_degree}, step=step)
+            except (ImportError, AttributeError):
+                pass
         return loss1
     
     def _sparse_mu_perturb(self, scaling_factor=1.0, params_ratio=0.1):

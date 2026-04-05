@@ -17,6 +17,7 @@ class ZO_SGD(ZeroOrderOptimizer):
             matrix_sampling_type: str = None, 
             perturbation_mode: str = "two_side",
             k: int = 1,
+            evaluate_memory: bool = False,
     ):
         super().__init__(
             params,
@@ -29,6 +30,7 @@ class ZO_SGD(ZeroOrderOptimizer):
             perturbation_mode=perturbation_mode,
         )
         self.k = max(1, k)
+        self.evaluate_memory = evaluate_memory
 
         for group in self.param_groups:
             for param in group['params']:

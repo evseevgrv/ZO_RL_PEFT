@@ -19,6 +19,7 @@ class ZO_RL_AdaMM(ZeroOrderOptimizer):
             lr_mu: Optional[float] = None,
             use_grad_first: bool = False,
             k: int = 10,
+            evaluate_memory: bool = False,
     ):
         super().__init__(
             params,
@@ -33,6 +34,7 @@ class ZO_RL_AdaMM(ZeroOrderOptimizer):
         self.lr_mu = lr_mu if lr_mu is not None else lr
         self.use_grad_first = use_grad_first
         self.k = k
+        self.evaluate_memory = evaluate_memory
         for group in self.param_groups:
             group['betas'] = betas
             for p in group['params']:
@@ -53,8 +55,9 @@ class ZO_RL_AdaMM(ZeroOrderOptimizer):
                 #     memory_format=torch.preserve_format
                 # )
                 # state['mu'] /= torch.linalg.norm(state['mu'])
-                state['mu_old'] = state['mu'].detach().clone()
-                state['mu_old_norm'] = torch.norm(state['mu_old']).item()**2
+                if not self.evaluate_memory:
+                    state['mu_old'] = state['mu'].detach().clone()
+                    state['mu_old_norm'] = torch.norm(state['mu_old']).item()**2
 
     @torch.no_grad()
     def step(self, closure=None):
@@ -129,6 +132,7 @@ class ZO_RL_AdaMM(ZeroOrderOptimizer):
                 p.data.addcdiv_(state['exp_avg'], state['max_exp_avg_sq'].sqrt().add_(1e-10), value=(-lr))
         mu_norm_diff = None
         mu_grad_norm = None
+        track_mu_stats = not self.evaluate_memory
         self.generator.manual_seed(self.zo_random_seed)
         for group in self.param_groups:
             beta1, beta2 = group['betas']
@@ -146,14 +150,15 @@ class ZO_RL_AdaMM(ZeroOrderOptimizer):
                     
                 g_mu = -mu_diff / (self.k * (self.variance ** 2))
                 state['mu'].add_(g_mu, alpha=-self.lr_mu)
-                if mu_norm_diff is None:
-                    mu_norm_diff = torch.linalg.norm(state['mu'] - state['mu_old'])**2 
-                else:
-                    mu_norm_diff += torch.linalg.norm(state['mu'] - state['mu_old'])**2 
-                if mu_grad_norm is None:
-                    mu_grad_norm = torch.linalg.norm(g_mu)**2 
-                else:
-                    mu_grad_norm += torch.linalg.norm(g_mu)**2 
+                if track_mu_stats:
+                    if mu_norm_diff is None:
+                        mu_norm_diff = torch.linalg.norm(state['mu'] - state['mu_old'])**2 
+                    else:
+                        mu_norm_diff += torch.linalg.norm(state['mu'] - state['mu_old'])**2 
+                    if mu_grad_norm is None:
+                        mu_grad_norm = torch.linalg.norm(g_mu)**2 
+                    else:
+                        mu_grad_norm += torch.linalg.norm(g_mu)**2 
         mu_norms = []
         for group in self.param_groups:
             for param in group['params']:
@@ -183,20 +188,21 @@ class ZO_RL_AdaMM(ZeroOrderOptimizer):
                 pass
         self.generator.manual_seed(self.zo_random_seed)
         
-        avg_mu_norm_diff = torch.sqrt(mu_norm_diff) / len(mu_norms)
-        avg_mu_grad_norm = torch.sqrt(mu_grad_norm) / len(mu_norms)
-        # Convert tensors to Python numbers
-        avg_mu_norm_diff_val = avg_mu_norm_diff.item() if torch.is_tensor(avg_mu_norm_diff) else float(avg_mu_norm_diff)
-        avg_mu_grad_norm_val = avg_mu_grad_norm.item() if torch.is_tensor(avg_mu_grad_norm) else float(avg_mu_grad_norm)
-        if wandb.run is not None:
-            wandb.log({"avg_mu_norm_diff": avg_mu_norm_diff_val, "avg_mu_grad_norm": avg_mu_grad_norm_val})
-        # Log to file if enabled
-        try:
-            from trainer import _optimizer_log_func
-            if _optimizer_log_func is not None and step is not None:
-                _optimizer_log_func({"avg_mu_norm_diff": avg_mu_norm_diff_val, "avg_mu_grad_norm": avg_mu_grad_norm_val}, step=step)
-        except (ImportError, AttributeError):
-            pass       
+        if track_mu_stats:
+            avg_mu_norm_diff = torch.sqrt(mu_norm_diff) / len(mu_norms)
+            avg_mu_grad_norm = torch.sqrt(mu_grad_norm) / len(mu_norms)
+            # Convert tensors to Python numbers
+            avg_mu_norm_diff_val = avg_mu_norm_diff.item() if torch.is_tensor(avg_mu_norm_diff) else float(avg_mu_norm_diff)
+            avg_mu_grad_norm_val = avg_mu_grad_norm.item() if torch.is_tensor(avg_mu_grad_norm) else float(avg_mu_grad_norm)
+            if wandb.run is not None:
+                wandb.log({"avg_mu_norm_diff": avg_mu_norm_diff_val, "avg_mu_grad_norm": avg_mu_grad_norm_val})
+            # Log to file if enabled
+            try:
+                from trainer import _optimizer_log_func
+                if _optimizer_log_func is not None and step is not None:
+                    _optimizer_log_func({"avg_mu_norm_diff": avg_mu_norm_diff_val, "avg_mu_grad_norm": avg_mu_grad_norm_val}, step=step)
+            except (ImportError, AttributeError):
+                pass       
 
         return loss1
     

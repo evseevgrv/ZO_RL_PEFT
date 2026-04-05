@@ -470,7 +470,7 @@ class OurTrainer(Trainer):
         if args.trainer == "zo_adam":
             self.optimizer = ZO_Adam(params, lr=args.learning_rate, eps=args.zo_eps, momentum=args.momentum, perturbation_mode=args.perturbation_mode, tensor_sampling_type=args.tensor_sampling_type, matrix_sampling_type=args.matrix_sampling_type)
         elif args.trainer == "zo_sgd":
-            self.optimizer = ZO_SGD(params, lr=args.learning_rate, eps=args.zo_eps, momentum=args.momentum, perturbation_mode=args.perturbation_mode, tensor_sampling_type=args.tensor_sampling_type, matrix_sampling_type=args.matrix_sampling_type, k=effective_k)
+            self.optimizer = ZO_SGD(params, lr=args.learning_rate, eps=args.zo_eps, momentum=args.momentum, perturbation_mode=args.perturbation_mode, tensor_sampling_type=args.tensor_sampling_type, matrix_sampling_type=args.matrix_sampling_type, k=effective_k, evaluate_memory=args.evaluate_memory)
         elif args.trainer == "zo_signsgd":
             self.optimizer = ZO_SignSGD(params, lr=args.learning_rate, eps=args.zo_eps, momentum=args.momentum, perturbation_mode=args.perturbation_mode, tensor_sampling_type=args.tensor_sampling_type, matrix_sampling_type=args.matrix_sampling_type)
         elif args.trainer == "zo_conserv":
@@ -484,7 +484,7 @@ class OurTrainer(Trainer):
         elif args.trainer == "jaguar_muon":
             self.optimizer = Jaguar_MUON(params, lr=args.learning_rate, eps=args.zo_eps, beta=args.zo_beta, perturbation_mode=args.perturbation_mode, tensor_sampling_type=args.tensor_sampling_type, matrix_sampling_type=args.matrix_sampling_type)
         elif args.trainer == "sparse_jaguar_signsgd":
-            self.optimizer = Sparse_Jaguar_SignSGD(params, lr=args.learning_rate, eps=args.zo_eps, beta=args.zo_beta, perturbation_mode=args.perturbation_mode, tensor_sampling_type=args.tensor_sampling_type, matrix_sampling_type=args.matrix_sampling_type, params_ratio=args.params_ratio)
+            self.optimizer = Sparse_Jaguar_SignSGD(params, lr=args.learning_rate, eps=args.zo_eps, beta=args.zo_beta, perturbation_mode=args.perturbation_mode, tensor_sampling_type=args.tensor_sampling_type, matrix_sampling_type=args.matrix_sampling_type, params_ratio=args.params_ratio, evaluate_memory=args.evaluate_memory)
         elif args.trainer == "sparse_jaguar_muon":
             self.optimizer = Sparse_Jaguar_MUON(params, lr=args.learning_rate, eps=args.zo_eps, beta=args.zo_beta, perturbation_mode=args.perturbation_mode, tensor_sampling_type=args.tensor_sampling_type, matrix_sampling_type=args.matrix_sampling_type, params_ratio=args.params_ratio)
         elif args.trainer == "zo_rl":
@@ -502,7 +502,8 @@ class OurTrainer(Trainer):
                 k=effective_k, 
                 variance=args.variance, 
                 lr_mu=args.lr_mu, 
-                use_grad_first=args.use_grad_first
+                use_grad_first=args.use_grad_first,
+                evaluate_memory=args.evaluate_memory
             )
             if args.use_grad_first:
                 self.model.zero_grad(set_to_none=True)
@@ -533,7 +534,8 @@ class OurTrainer(Trainer):
                 k=effective_k, 
                 variance=args.variance, 
                 lr_mu=args.lr_mu, 
-                use_grad_first=args.use_grad_first
+                use_grad_first=args.use_grad_first,
+                evaluate_memory=args.evaluate_memory
             )
             if args.use_grad_first:
                 self.model.zero_grad(set_to_none=True)
@@ -553,6 +555,7 @@ class OurTrainer(Trainer):
                 tensor_sampling_type=args.tensor_sampling_type, 
                 matrix_sampling_type=args.matrix_sampling_type,
                 k=effective_k,
+                evaluate_memory=args.evaluate_memory,
             )
         elif args.trainer == "zo_adamu":
             total_steps = max(
@@ -637,7 +640,8 @@ class OurTrainer(Trainer):
                 variance=args.variance,
                 lr_mu=args.lr_mu,
                 use_grad_first=args.use_grad_first,
-                k=effective_k
+                k=effective_k,
+                evaluate_memory=args.evaluate_memory,
             )
             if args.use_grad_first:
                 self.model.zero_grad(set_to_none=True)

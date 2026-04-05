@@ -15,7 +15,8 @@ class Sparse_Jaguar_SignSGD(ZeroOrderOptimizer):
             tensor_sampling_type: str = "standard_normal", 
             matrix_sampling_type: str = None,  
             perturbation_mode: str = "two_side",
-            params_ratio: float = 0.1
+            params_ratio: float = 0.1,
+            evaluate_memory: bool = False,
     ):
         super().__init__(
             params,
@@ -29,6 +30,7 @@ class Sparse_Jaguar_SignSGD(ZeroOrderOptimizer):
         for group in self.param_groups:
             group['beta'] = beta
         self.params_ratio = params_ratio
+        self.evaluate_memory = evaluate_memory
         self.all_params = [p for group in self.param_groups for p in group['params']]
         total_params = sum(p.numel() for p in self.all_params)
         for group in self.param_groups:
