@@ -1,6 +1,6 @@
 #!/bin/bash
 
-export CUDA_VISIBLE_DEVICES=4
+export CUDA_VISIBLE_DEVICES=3
 export WANDB_DISABLED="false"
 export WANDB_ENTITY="andrey"
 export WANDB_API_KEY=""
@@ -8,10 +8,7 @@ export HF_TOKEN=""
 
 # Список значений learning_rate для перебора
 learning_rates=(
-# "5e-5" "6e-5" "7e-5" "8e-5" "9e-5" "2e-4" "3e-4" "4e-4" "5e-4"
-# 5e-3 6e-3 7e-3 9e-3 1e-2
-# 2e-3 3e-3 8e-4 9e-4
-5e-8 6e-8 7e-8
+    4e-8 
 )
 
 for mu_lr in "${learning_rates[@]}"; do
@@ -22,10 +19,12 @@ for mu_lr in "${learning_rates[@]}"; do
     command="python run.py"
 
     # Model and Task Configuration
-    command+=" --model_name=\"facebook/opt-1.3b\""
+    command+=" --model_name=\"roberta-large\""
     # command+=" --lora"
     command+=" --task_name=\"SST2\""
     command+=" --trainer=\"zo_rl_sgd\""
+
+    command+=" --use_grad_first=True"
 
     # Logging and Reporting
     command+=" --output_dir=\"result/SST2-FT-${TAG}\""

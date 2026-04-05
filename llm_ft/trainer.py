@@ -1145,6 +1145,20 @@ class OurTrainer(Trainer):
             loss.backward()
 
         # Sparse gradient (match training_step behavior)
+        if not hasattr(self, "sparse_grad_rng") or self.sparse_grad_rng is None:
+            self.sparse_grad_rng = torch.Generator(device='cuda' if torch.cuda.is_available() else 'cpu')
+        if not hasattr(self, "sparse_grad_random_seed"):
+            self.sparse_grad_random_seed = np.random.randint(1_000_000_000)
+
+        if self.gradient_sparsity is None and self.args.gradient_sparsity is not None:
+            if self.args.sparse_gradient_group == "layer":
+                self.gradient_sparsity = self.args.gradient_sparsity
+            elif self.args.sparse_gradient_group == "global":
+                threshold = estimate_pretrained_model_magnitude_pruning_threshold(
+                    self.model, self.args.gradient_sparsity
+                )
+                self.gradient_sparsity = compute_named_parameters_to_sparsity(self.model, threshold)
+
         self.sparse_grad_rng.manual_seed(self.sparse_grad_random_seed)
         for name, param in self.model.named_parameters():
             if not param.requires_grad:
