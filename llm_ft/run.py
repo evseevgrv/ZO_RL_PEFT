@@ -185,6 +185,7 @@ class OurArguments(TrainingArguments):
     ## - zo_adamu: zeroth-order AdaMU training
     ## - hizoo: Hessian-informed zeroth-order training
     ## - mezo_svrg: variance-reduced zeroth-order training
+    ## - mezo_svrg_rl: RL-style variance-reduced zeroth-order training
     ## - hizoo_rl: RL-style Hessian-informed zeroth-order training
     ## - zo_sign_opt: zeroth-order sign sgd training
     ## - forward_grad: forward gradient

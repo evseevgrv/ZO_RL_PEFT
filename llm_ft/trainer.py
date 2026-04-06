@@ -602,6 +602,32 @@ class OurTrainer(Trainer):
                 q=args.mezo_svrg_q,
                 full_lr=args.mezo_svrg_full_lr,
             )
+        elif args.trainer == "mezo_svrg_rl":
+            if args.use_grad_first:
+                self._compute_initial_grads_for_mu(train_dataloader)
+            self.optimizer = MeZO_SVRG_RL(
+                params=params,
+                lr=args.learning_rate,
+                eps=args.zo_eps,
+                weight_decay=args.weight_decay,
+                perturbation_mode=args.perturbation_mode,
+                tensor_sampling_type=args.tensor_sampling_type,
+                matrix_sampling_type=args.matrix_sampling_type,
+                q=args.mezo_svrg_q,
+                full_lr=args.mezo_svrg_full_lr,
+                variance=args.variance,
+                lr_mu=args.lr_mu,
+                use_grad_first=args.use_grad_first,
+                k=effective_k,
+                evaluate_memory=args.evaluate_memory,
+            )
+            if args.use_grad_first:
+                self.model.zero_grad(set_to_none=True)
+            if hasattr(args, 'log_to_file') and args.log_to_file:
+                log_dir = getattr(args, 'log_run_dir', None) or getattr(args, 'log_dir', None) or "logs"
+                def optimizer_log_func(metrics_dict, step):
+                    _log_to_file_if_enabled(metrics_dict, step=step, log_dir=log_dir)
+                set_optimizer_log_func(optimizer_log_func)
         elif args.trainer == "hizoo_rl":
             if args.use_grad_first:
                 self._compute_initial_grads_for_mu(train_dataloader)
@@ -770,7 +796,7 @@ class OurTrainer(Trainer):
             print(f"### global gradient sparsity, weight magnitude threshold = {threshold}")
 
         mezo_svrg_full_batch_loader = None
-        if args.trainer == "mezo_svrg":
+        if args.trainer in {"mezo_svrg", "mezo_svrg_rl"}:
             if not hasattr(train_dataloader, "dataset") or train_dataloader.dataset is None:
                 raise ValueError("MeZO-SVRG requires access to the train dataset")
             if not has_length(train_dataloader.dataset):
@@ -869,7 +895,7 @@ class OurTrainer(Trainer):
                 if step % args.gradient_accumulation_steps == 0:
                     self.control = self.callback_handler.on_step_begin(args, self.state, self.control)
 
-                if args.trainer == "mezo_svrg":
+                if args.trainer in {"mezo_svrg", "mezo_svrg_rl"}:
                     closure = self.create_mezo_svrg_closure(
                         model,
                         inputs,

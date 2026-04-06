@@ -244,4 +244,5 @@ def test_resolve_k_value_defaults():
     assert resolve_k_value("zo_rl_sgd", None) == 10
     assert resolve_k_value("zo_rl_adamm", None) == 10
     assert resolve_k_value("hizoo_rl", None) == 10
+    assert resolve_k_value("mezo_svrg_rl", None) == 10
     assert resolve_k_value("zo_sgd", 7) == 7
