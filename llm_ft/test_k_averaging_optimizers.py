@@ -19,6 +19,7 @@ torch = pytest.importorskip("torch")
 
 from k_utils import resolve_k_value
 from optimizers.jaguar_signsgd import Jaguar_SignSGD
+from optimizers.sparse_jaguar_signsgd import Sparse_Jaguar_SignSGD
 from optimizers.zo_adamm import ZO_AdaMM
 from optimizers.zo_sgd import ZO_SGD
 
@@ -164,10 +165,43 @@ def test_jaguar_signsgd_matches_sparse_probe_average(monkeypatch, k, seeds):
     )
 
 
+@pytest.mark.parametrize("k,seeds", [(1, [19]), (2, [19, 37])])
+def test_sparse_jaguar_signsgd_matches_manual_probe_average(monkeypatch, k, seeds):
+    _patch_randint(monkeypatch, seeds)
+
+    theta0 = torch.tensor([0.25, -0.5, 0.75], dtype=torch.float32)
+    initial_grad_accum = torch.tensor([0.4, -0.6, 0.8], dtype=torch.float32)
+
+    param = torch.nn.Parameter(theta0.clone())
+    optimizer = Sparse_Jaguar_SignSGD(
+        [param],
+        lr=0.05,
+        eps=1e-3,
+        beta=0.9,
+        params_ratio=1.0,
+        k=k,
+    )
+    optimizer.state[param]["step"] = 0
+    optimizer.state[param]["grad_accum"] = initial_grad_accum.clone()
+
+    closure, calls = _make_quadratic_closure(param)
+    returned_loss = optimizer.step(closure)
+
+    expected_loss, expected_grad = _dense_probe_average(theta0, 1e-3, seeds)
+    expected_grad_accum = 0.9 * initial_grad_accum + 0.1 * expected_grad
+    expected_param = theta0 - 0.05 * torch.sign(expected_grad_accum)
+
+    assert calls["count"] == 2 * k
+    assert torch.allclose(returned_loss, expected_loss)
+    assert torch.allclose(optimizer.state[param]["grad_accum"], expected_grad_accum, atol=1e-6, rtol=1e-6)
+    assert torch.allclose(param.detach(), expected_param, atol=1e-6, rtol=1e-6)
+
+
 def test_resolve_k_value_defaults():
     assert resolve_k_value("zo_sgd", None) == 1
     assert resolve_k_value("zo_adamm", None) == 1
     assert resolve_k_value("jaguar_signsgd", None) == 1
+    assert resolve_k_value("sparse_jaguar_signsgd", None) == 1
     assert resolve_k_value("zo_rl", None) == 10
     assert resolve_k_value("zo_rl_sgd", None) == 10
     assert resolve_k_value("zo_rl_adamm", None) == 10

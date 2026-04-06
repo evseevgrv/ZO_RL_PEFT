@@ -1,6 +1,6 @@
 #!/bin/bash
 
-export CUDA_VISIBLE_DEVICES=2
+export CUDA_VISIBLE_DEVICES=1
 export WANDB_DISABLED="false"
 export WANDB_ENTITY="andrey"
 export WANDB_API_KEY=""
@@ -112,6 +112,8 @@ for lr in "${learning_rates[@]}"; do
         # Sampling Methods
         command+=" --tensor_sampling_type=\"standard_normal\""
         command+=" --matrix_sampling_type=\"Random_baseline\""
+
+        command+=" --evaluate_memory=True"
 
         # Jaguar-Specific Parameters
         command+=" --zo_tau=1e-3"

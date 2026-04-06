@@ -16,6 +16,7 @@ class Sparse_Jaguar_SignSGD(ZeroOrderOptimizer):
             matrix_sampling_type: str = None,  
             perturbation_mode: str = "two_side",
             params_ratio: float = 0.1,
+            k: int = 1,
             evaluate_memory: bool = False,
     ):
         super().__init__(
@@ -29,6 +30,7 @@ class Sparse_Jaguar_SignSGD(ZeroOrderOptimizer):
 
         for group in self.param_groups:
             group['beta'] = beta
+        self.k = max(1, k)
         self.params_ratio = params_ratio
         self.evaluate_memory = evaluate_memory
         self.all_params = [p for group in self.param_groups for p in group['params']]
@@ -44,60 +46,100 @@ class Sparse_Jaguar_SignSGD(ZeroOrderOptimizer):
                     )
     @torch.no_grad()
     def step(self, closure=None):
-        loss1, loss2 = None, None 
+        loss_plus_values = []
+        projected_grads = []
+        grad_sums = {}
 
         for group in self.param_groups:
             for param in group['params']:    
                 state = self.state[param]
                 state['step'] += 1
 
-        self.zo_random_seed = np.random.randint(1_000_000_000)
-        self.generator.manual_seed(self.zo_random_seed)
+        for _ in range(self.k):
+            seed = np.random.randint(1_000_000_000)
+            self.zo_random_seed = seed
 
-        self._sparse_indices_perturb(scaling_factor = 1.0, params_ratio = self.params_ratio)
-        if closure is not None:
-            loss1 = closure()
-        self.generator.manual_seed(self.zo_random_seed)
+            self.generator.manual_seed(seed)
+            selected_param_ids = self._sample_selected_param_ids(params_ratio=self.params_ratio)
 
-        self._sparse_indices_perturb(scaling_factor = -2.0, params_ratio = self.params_ratio)
-        if closure is not None:
-            loss2 = closure()
-        self.generator.manual_seed(self.zo_random_seed)
+            self.generator.manual_seed(seed)
+            self._sparse_indices_perturb(
+                scaling_factor=1.0,
+                selected_param_ids=selected_param_ids,
+            )
+            loss_plus = closure()
+            loss_plus_values.append(loss_plus)
 
-        self._sparse_indices_perturb(scaling_factor = 1.0, params_ratio = self.params_ratio)
-        self.generator.manual_seed(self.zo_random_seed)
+            self.generator.manual_seed(seed)
+            self._sparse_indices_perturb(
+                scaling_factor=-2.0,
+                selected_param_ids=selected_param_ids,
+            )
+            loss_minus = closure()
 
-        grad_update = self.grad_approx(loss_plus=loss1, loss_minus=loss2, perturbation_mode="two_side")
+            projected_grad = self.grad_approx(
+                loss_plus=loss_plus,
+                loss_minus=loss_minus,
+                perturbation_mode="two_side",
+            )
+            projected_grads.append(projected_grad)
 
-        n = max(1, int(len(self.all_params) * self.params_ratio))
-        param_indices =  torch.randperm(len(self.all_params), device=self.all_params[0].device, generator=self.generator)[:n]
-        self.generator.manual_seed(self.zo_random_seed)
-        selected_param_ids = {id(self.all_params[idx]) for idx in param_indices}
+            self.generator.manual_seed(seed)
+            self._sparse_indices_perturb(
+                scaling_factor=1.0,
+                selected_param_ids=selected_param_ids,
+            )
+
+            self.generator.manual_seed(seed)
+            for group in self.param_groups:
+                eps = group['eps']
+                for param in group['params']:
+                    if id(param) not in selected_param_ids:
+                        continue
+
+                    if param not in grad_sums:
+                        grad_sums[param] = torch.zeros_like(
+                            param,
+                            memory_format=torch.preserve_format,
+                        )
+
+                    z = self.tensor_sampler.sample(
+                        param.shape,
+                        generator=self.generator,
+                    ).to(param.device)
+                    grad_sums[param].add_(z * (projected_grad / (eps * self.k)))
+
+        self.projected_grad = sum(projected_grads) / len(projected_grads)
+
         for group in self.param_groups:
             lr = group['lr']  
             beta = group['beta']
-            eps = group['eps']
-            
-            for param in group['params']:           
 
-                state = self.state[param]                
-                device = param.device
-                
-                if id(param) in selected_param_ids:
-                    z = self.tensor_sampler.sample(param.shape, generator=self.generator).to(device)
-                    grad_final = z * grad_update / eps 
-                    state['grad_accum'].mul_(beta).add_(grad_final, alpha=(1.0 - beta))
-                
+            for param in group['params']:
+                state = self.state[param]
+                grad = grad_sums.get(param)
+                if grad is not None:
+                    state['grad_accum'].mul_(beta).add_(grad, alpha=(1.0 - beta))
+
                 update_direction = torch.sign(state['grad_accum'])
                 param.data.add_(update_direction, alpha=-lr)
 
-        return loss1
+        return torch.stack(loss_plus_values).mean()
     
-    def _sparse_indices_perturb(self, scaling_factor = 1.0, params_ratio = 0.1):
+    def _sample_selected_param_ids(self, params_ratio=0.1):
         n = max(1, int(len(self.all_params) * params_ratio))
-        param_indices =  torch.randperm(len(self.all_params), device=self.all_params[0].device, generator=self.generator)[:n]
-        self.generator.manual_seed(self.zo_random_seed)
-        selected_param_ids = {id(self.all_params[idx]) for idx in param_indices}
+        param_indices = torch.randperm(
+            len(self.all_params),
+            device=self.all_params[0].device,
+            generator=self.generator,
+        )[:n]
+        return {id(self.all_params[idx]) for idx in param_indices}
+
+    def _sparse_indices_perturb(self, scaling_factor = 1.0, params_ratio = 0.1, selected_param_ids=None):
+        if selected_param_ids is None:
+            selected_param_ids = self._sample_selected_param_ids(params_ratio=params_ratio)
+            self.generator.manual_seed(self.zo_random_seed)
+
         for group in self.param_groups:
             eps = group['eps']
             
