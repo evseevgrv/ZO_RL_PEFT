@@ -59,6 +59,13 @@ class Sparse_Jaguar_SignSGD(ZeroOrderOptimizer):
         selection_seed = np.random.randint(1_000_000_000)
         self.generator.manual_seed(selection_seed)
         selected_param_ids = self._sample_selected_param_ids(params_ratio=self.params_ratio)
+        for group in self.param_groups:
+            for param in group['params']:
+                if id(param) in selected_param_ids:
+                    grad_sums[param] = torch.zeros_like(
+                        param,
+                        memory_format=torch.preserve_format,
+                    )
 
         for _ in range(self.k):
             seed = np.random.randint(1_000_000_000)
@@ -98,12 +105,6 @@ class Sparse_Jaguar_SignSGD(ZeroOrderOptimizer):
                 for param in group['params']:
                     if id(param) not in selected_param_ids:
                         continue
-
-                    if param not in grad_sums:
-                        grad_sums[param] = torch.zeros_like(
-                            param,
-                            memory_format=torch.preserve_format,
-                        )
 
                     z = self.tensor_sampler.sample(
                         param.shape,
