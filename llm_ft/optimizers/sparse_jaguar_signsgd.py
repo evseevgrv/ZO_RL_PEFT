@@ -55,12 +55,14 @@ class Sparse_Jaguar_SignSGD(ZeroOrderOptimizer):
                 state = self.state[param]
                 state['step'] += 1
 
+        # Keep the sparse parameter subset fixed across the k probes in this step.
+        selection_seed = np.random.randint(1_000_000_000)
+        self.generator.manual_seed(selection_seed)
+        selected_param_ids = self._sample_selected_param_ids(params_ratio=self.params_ratio)
+
         for _ in range(self.k):
             seed = np.random.randint(1_000_000_000)
             self.zo_random_seed = seed
-
-            self.generator.manual_seed(seed)
-            selected_param_ids = self._sample_selected_param_ids(params_ratio=self.params_ratio)
 
             self.generator.manual_seed(seed)
             self._sparse_indices_perturb(

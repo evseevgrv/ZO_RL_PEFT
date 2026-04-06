@@ -197,6 +197,44 @@ def test_sparse_jaguar_signsgd_matches_manual_probe_average(monkeypatch, k, seed
     assert torch.allclose(param.detach(), expected_param, atol=1e-6, rtol=1e-6)
 
 
+def test_sparse_jaguar_signsgd_reuses_selected_params_across_k(monkeypatch):
+    _patch_randint(monkeypatch, [101, 11, 29, 47])
+
+    param_a0 = torch.tensor([0.2, -0.4], dtype=torch.float32)
+    param_b0 = torch.tensor([0.7, -0.1], dtype=torch.float32)
+    param_a = torch.nn.Parameter(param_a0.clone())
+    param_b = torch.nn.Parameter(param_b0.clone())
+    optimizer = Sparse_Jaguar_SignSGD(
+        [param_a, param_b],
+        lr=0.05,
+        eps=1e-3,
+        beta=0.9,
+        params_ratio=0.5,
+        k=3,
+    )
+
+    selected_calls = {"count": 0}
+
+    def fixed_selected_param_ids(params_ratio=0.1):
+        selected_calls["count"] += 1
+        return {id(param_a)}
+
+    monkeypatch.setattr(optimizer, "_sample_selected_param_ids", fixed_selected_param_ids)
+
+    closure_calls = {"count": 0}
+
+    def closure():
+        closure_calls["count"] += 1
+        return param_a.square().sum() + param_b.square().sum()
+
+    optimizer.step(closure)
+
+    assert selected_calls["count"] == 1
+    assert closure_calls["count"] == 6
+    assert not torch.allclose(param_a.detach(), param_a0)
+    assert torch.allclose(param_b.detach(), param_b0)
+
+
 def test_resolve_k_value_defaults():
     assert resolve_k_value("zo_sgd", None) == 1
     assert resolve_k_value("zo_adamm", None) == 1
