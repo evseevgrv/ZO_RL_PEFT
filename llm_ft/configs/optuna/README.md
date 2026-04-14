@@ -20,3 +20,8 @@ scheduler settings, `max_steps: 20000`, `num_training_steps: 20000`, and
 `save_strategy: "no"`. Each trial logs to WandB via `use_wandb: true` and
 `report_to: "wandb"`. `tau` is mapped to `zo_eps` because `zo_tau` is currently
 not consumed by the LLM trainer.
+Optuna optimizes `test_accuracy` by default.
+
+Optuna trial tags, which are also used as WandB run names, include the study,
+trainer, task, short model name, tuning mode, and trial number, for example:
+`optuna/study/zo_rl_jaguar-SST2-roberta-large-lora/trial_0`.

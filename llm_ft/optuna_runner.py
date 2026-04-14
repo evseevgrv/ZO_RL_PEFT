@@ -26,7 +26,7 @@ from typing import Any, Dict, Iterable, List, Mapping, MutableMapping, Optional,
 
 LOGGER = logging.getLogger("optuna_runner")
 SCRIPT_DIR = Path(__file__).resolve().parent
-DEFAULT_METRIC_KEY = "val_accuracy"
+DEFAULT_METRIC_KEY = "test_accuracy"
 DEFAULT_DIRECTION = "maximize"
 DEFAULT_STUDY_PREFIX = "llm_ft_optuna"
 BETA_TRAINERS = {
@@ -310,10 +310,41 @@ def sanitize_path_component(value: str) -> str:
     return clean or "study"
 
 
-def make_trial_tag(config: Mapping[str, Any], study_slug: str, trial_number: int) -> str:
-    base_args = config.get("base_args", {})
-    base_tag = str(base_args.get("tag") or config.get("tag_prefix") or "")
-    tag_parts = ["optuna", study_slug]
+def is_truthy_arg(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y"}
+    return bool(value)
+
+
+def optimization_mode(args: Mapping[str, Any]) -> str:
+    if is_truthy_arg(args.get("prefix_tuning", False)):
+        return "prefix"
+    if is_truthy_arg(args.get("lora", False)):
+        return "lora"
+    if is_truthy_arg(args.get("prompt_tuning", False)):
+        return "prompt"
+    return "ft"
+
+
+def run_descriptor(args: Mapping[str, Any]) -> str:
+    trainer = sanitize_path_component(str(args.get("trainer", "trainer")))
+    task = sanitize_path_component(str(args.get("task_name", "task")))
+    model_name = str(args.get("model_name", "model")).rstrip("/").split("/")[-1]
+    model = sanitize_path_component(model_name)
+    mode = sanitize_path_component(optimization_mode(args))
+    return f"{trainer}-{task}-{model}-{mode}"
+
+
+def make_trial_tag(
+    config: Mapping[str, Any],
+    run_args: Mapping[str, Any],
+    study_slug: str,
+    trial_number: int,
+) -> str:
+    base_tag = str(run_args.get("tag") or config.get("tag_prefix") or "")
+    tag_parts = ["optuna", study_slug, run_descriptor(run_args)]
     if base_tag:
         tag_parts.append(sanitize_path_component(base_tag))
     tag_parts.append(f"trial_{trial_number}")
@@ -342,7 +373,9 @@ def build_command(
     search_space = config["search_space"]
     base_args = copy.deepcopy(dict(config.get("base_args", {})))
     trial_args = target_trial_args(trial_params, search_space)
-    tag = make_trial_tag(config, study_slug, trial_number)
+    run_args = copy.deepcopy(base_args)
+    run_args.update(trial_args)
+    tag = make_trial_tag(config, run_args, study_slug, trial_number)
 
     # run.py requires output_dir at parse time and then overwrites it from tag.
     base_args.pop("tag", None)

@@ -1,6 +1,6 @@
 {
   "inherit_base_args": false,
-  "metric_key": "val_accuracy",
+  "metric_key": "test_accuracy",
   "direction": "maximize",
   "base_args": {
     "model_name": "meta-llama/Llama-2-7b-hf",
