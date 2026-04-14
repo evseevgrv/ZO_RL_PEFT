@@ -34,7 +34,6 @@ class Sparse_Jaguar_SignSGD(ZeroOrderOptimizer):
         self.params_ratio = params_ratio
         self.evaluate_memory = evaluate_memory
         self.all_params = [p for group in self.param_groups for p in group['params']]
-        total_params = sum(p.numel() for p in self.all_params)
         for group in self.param_groups:
             for param in group['params']:    
                 state = self.state[param]
@@ -44,6 +43,7 @@ class Sparse_Jaguar_SignSGD(ZeroOrderOptimizer):
                         param, 
                         memory_format=torch.preserve_format
                     )
+
     @torch.no_grad()
     def step(self, closure=None):
         loss_plus_values = []
@@ -99,6 +99,8 @@ class Sparse_Jaguar_SignSGD(ZeroOrderOptimizer):
                 selected_param_ids=selected_param_ids,
             )
 
+            # Replay the same generator stream: selected params get different sequential z,
+            # while each param sees the same z here as it saw during perturb.
             self.generator.manual_seed(seed)
             for group in self.param_groups:
                 eps = group['eps']
@@ -106,10 +108,7 @@ class Sparse_Jaguar_SignSGD(ZeroOrderOptimizer):
                     if id(param) not in selected_param_ids:
                         continue
 
-                    z = self.tensor_sampler.sample(
-                        param.shape,
-                        generator=self.generator,
-                    ).to(param.device)
+                    z = self._sample_direction(param)
                     grad_sums[param].add_(z * (projected_grad / (eps * self.k)))
 
         self.projected_grad = sum(projected_grads) / len(projected_grads)
@@ -136,7 +135,15 @@ class Sparse_Jaguar_SignSGD(ZeroOrderOptimizer):
             device=self.all_params[0].device,
             generator=self.generator,
         )[:n]
-        return {id(self.all_params[idx]) for idx in param_indices}
+        return {id(self.all_params[int(idx)]) for idx in param_indices}
+
+    def _sample_direction(self, param):
+        tensor_sampling_type = self.state[param]['tensor_sampling_type']
+        return self.tensor_sampler.sample(
+            param.shape,
+            generator=self.generator,
+            sampler_type=tensor_sampling_type,
+        ).to(param.device)
 
     def _sparse_indices_perturb(self, scaling_factor = 1.0, params_ratio = 0.1, selected_param_ids=None):
         if selected_param_ids is None:
@@ -148,6 +155,5 @@ class Sparse_Jaguar_SignSGD(ZeroOrderOptimizer):
             
             for param in group['params']:                     
                 if id(param) in selected_param_ids:
-                    device = param.device
-                    z = self.tensor_sampler.sample(param.shape, generator=self.generator).to(device)
+                    z = self._sample_direction(param)
                     param.data += scaling_factor * eps * z

@@ -167,7 +167,7 @@ def test_jaguar_signsgd_matches_sparse_probe_average(monkeypatch, k, seeds):
 
 @pytest.mark.parametrize("k,seeds", [(1, [19]), (2, [19, 37])])
 def test_sparse_jaguar_signsgd_matches_manual_probe_average(monkeypatch, k, seeds):
-    _patch_randint(monkeypatch, seeds)
+    _patch_randint(monkeypatch, [101, *seeds])
 
     theta0 = torch.tensor([0.25, -0.5, 0.75], dtype=torch.float32)
     initial_grad_accum = torch.tensor([0.4, -0.6, 0.8], dtype=torch.float32)
@@ -195,6 +195,43 @@ def test_sparse_jaguar_signsgd_matches_manual_probe_average(monkeypatch, k, seed
     assert torch.allclose(returned_loss, expected_loss)
     assert torch.allclose(optimizer.state[param]["grad_accum"], expected_grad_accum, atol=1e-6, rtol=1e-6)
     assert torch.allclose(param.detach(), expected_param, atol=1e-6, rtol=1e-6)
+
+
+def test_sparse_jaguar_signsgd_reuses_probe_vectors_for_update(monkeypatch):
+    _patch_randint(monkeypatch, [101, 202])
+
+    param_a = torch.nn.Parameter(torch.tensor([0.2, -0.4], dtype=torch.float32))
+    param_b = torch.nn.Parameter(torch.tensor([0.7, -0.1], dtype=torch.float32))
+    optimizer = Sparse_Jaguar_SignSGD(
+        [param_a, param_b],
+        lr=0.05,
+        eps=1e-3,
+        beta=0.9,
+        params_ratio=1.0,
+        k=1,
+    )
+
+    sample_calls = []
+    original_sample = optimizer.tensor_sampler.sample
+
+    def recording_sample(param_shape, generator=None, sampler_type=None):
+        z = original_sample(param_shape, generator=generator, sampler_type=sampler_type)
+        sample_calls.append(z.detach().clone().cpu())
+        return z
+
+    monkeypatch.setattr(optimizer.tensor_sampler, "sample", recording_sample)
+
+    def closure():
+        return param_a.square().sum() + param_b.square().sum()
+
+    optimizer.step(closure)
+
+    assert len(sample_calls) == 8
+    assert not torch.allclose(sample_calls[0], sample_calls[1])
+    for param_offset in (0, 1):
+        assert torch.allclose(sample_calls[param_offset], sample_calls[param_offset + 2])
+        assert torch.allclose(sample_calls[param_offset], sample_calls[param_offset + 4])
+        assert torch.allclose(sample_calls[param_offset], sample_calls[param_offset + 6])
 
 
 def test_sparse_jaguar_signsgd_reuses_selected_params_across_k(monkeypatch):
