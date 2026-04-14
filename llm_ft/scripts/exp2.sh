@@ -1,16 +1,21 @@
 #!/bin/bash
 
-export CUDA_VISIBLE_DEVICES=3
+cd "$(dirname "$0")/.."
+
+export CUDA_VISIBLE_DEVICES=6
 export WANDB_DISABLED="false"
 export WANDB_ENTITY="andrey"
 export WANDB_API_KEY=""
 export HF_TOKEN=""
 
+# Список значений learning_rate для перебора
 learning_rates=(
-   1e-5 2e-5 3e-5 4e-5 6e-5 7e-5 8e-5 9e-5 1e-4
+# "5e-5" "6e-5" "7e-5" "8e-5" "9e-5" "2e-4" "3e-4" "4e-4" "5e-4"
+# 5e-3 6e-3 7e-3 9e-3 1e-2
+0.8 0.9 1.1 1.5 2
 )
 
-for lr in "${learning_rates[@]}"; do
+for mu_lr in "${learning_rates[@]}"; do
     # Формируем тег для output_dir и wandb (заменяем точку и 'e' на допустимые символы)
     TAG="lr_${lr//./_}"        # Заменяем '.' на '_' (например: 1e-3 → lr_1e-3, 0.01 → lr_0_01)
     TAG="${TAG//e/E}"          # Опционально: заменить 'e' на 'E' для читаемости
@@ -18,10 +23,10 @@ for lr in "${learning_rates[@]}"; do
     command="python run.py"
 
     # Model and Task Configuration
-    command+=" --model_name=\"meta-llama/Llama-2-7b-hf\""
+    command+=" --model_name=\"roberta-large\""
     command+=" --lora"
-    command+=" --task_name=\"Copa\""
-    command+=" --trainer=\"zo_rl_adamm\""
+    command+=" --task_name=\"SST2\""
+    command+=" --trainer=\"zo_rl_sgd\""
 
     # Logging and Reporting
     command+=" --output_dir=\"result/SST2-FT-${TAG}\""
@@ -43,8 +48,8 @@ for lr in "${learning_rates[@]}"; do
 
     # Dataset Settings
     command+=" --num_eval=1000"
-    command+=" --num_train=1000000"
-    # command+=" --num_dev=100"
+    command+=" --num_train=1000"
+    command+=" --num_dev=500"
     command+=" --train_as_classification"
     command+=" --train_set_seed=0"
 
@@ -59,7 +64,7 @@ for lr in "${learning_rates[@]}"; do
     command+=" --overwrite_output_dir"
 
     # Learning Rate Scheduler Settings
-    command+=" --learning_rate=${lr}"
+    command+=" --learning_rate=3e-4"
     command+=" --scheduler=\"cosine\""
     command+=" --num_training_steps=20000"
     command+=" --warmup_steps=0"
@@ -79,7 +84,7 @@ for lr in "${learning_rates[@]}"; do
 
     command+=" --lr_mu=1e-3"
     command+=" --k_value=5"
-    command+=" --variance=1"
+    command+=" --variance=${mu_lr}"
     command+=" --use_grad_first=False"
 
     command+=" --beta1=0.9"

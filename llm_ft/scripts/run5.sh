@@ -1,17 +1,18 @@
 #!/bin/bash
 
+cd "$(dirname "$0")/.."
+
 export CUDA_VISIBLE_DEVICES=3
 export WANDB_DISABLED="false"
 export WANDB_ENTITY="andrey"
 export WANDB_API_KEY=""
 export HF_TOKEN=""
 
-# Список значений learning_rate для перебора
 learning_rates=(
-    4e-8 
+   1e-5 2e-5 3e-5 4e-5 6e-5 7e-5 8e-5 9e-5 1e-4
 )
 
-for mu_lr in "${learning_rates[@]}"; do
+for lr in "${learning_rates[@]}"; do
     # Формируем тег для output_dir и wandb (заменяем точку и 'e' на допустимые символы)
     TAG="lr_${lr//./_}"        # Заменяем '.' на '_' (например: 1e-3 → lr_1e-3, 0.01 → lr_0_01)
     TAG="${TAG//e/E}"          # Опционально: заменить 'e' на 'E' для читаемости
@@ -19,12 +20,10 @@ for mu_lr in "${learning_rates[@]}"; do
     command="python run.py"
 
     # Model and Task Configuration
-    command+=" --model_name=\"roberta-large\""
-    # command+=" --lora"
-    command+=" --task_name=\"SST2\""
-    command+=" --trainer=\"zo_rl_sgd\""
-
-    command+=" --use_grad_first=True"
+    command+=" --model_name=\"meta-llama/Llama-2-7b-hf\""
+    command+=" --lora"
+    command+=" --task_name=\"Copa\""
+    command+=" --trainer=\"zo_rl_adamm\""
 
     # Logging and Reporting
     command+=" --output_dir=\"result/SST2-FT-${TAG}\""
@@ -46,8 +45,8 @@ for mu_lr in "${learning_rates[@]}"; do
 
     # Dataset Settings
     command+=" --num_eval=1000"
-    command+=" --num_train=1000"
-    command+=" --num_dev=500"
+    command+=" --num_train=1000000"
+    # command+=" --num_dev=100"
     command+=" --train_as_classification"
     command+=" --train_set_seed=0"
 
@@ -62,7 +61,7 @@ for mu_lr in "${learning_rates[@]}"; do
     command+=" --overwrite_output_dir"
 
     # Learning Rate Scheduler Settings
-    command+=" --learning_rate=${mu_lr}"
+    command+=" --learning_rate=${lr}"
     command+=" --scheduler=\"cosine\""
     command+=" --num_training_steps=20000"
     command+=" --warmup_steps=0"

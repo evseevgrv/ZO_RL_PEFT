@@ -1,0 +1,60 @@
+{
+  "inherit_base_args": false,
+  "metric_key": "val_accuracy",
+  "direction": "maximize",
+  "base_args": {
+    "model_name": "roberta-large",
+    "lora": true,
+    "task_name": "SST2",
+    "trainer": "zo_conserv",
+    "project_name": "zo-rl-optuna",
+    "report_to": "none",
+    "logging_steps": 10,
+    "num_train_epochs": 5,
+    "per_device_train_batch_size": 16,
+    "load_best_model_at_end": false,
+    "evaluation_strategy": "steps",
+    "save_strategy": "no",
+    "save_total_limit": 1,
+    "eval_steps": 500,
+    "max_steps": 20000,
+    "save_steps": 1000,
+    "num_eval": 1000,
+    "num_train": 5000,
+    "num_dev": 500,
+    "train_as_classification": true,
+    "train_set_seed": 0,
+    "perturbation_mode": "two_side",
+    "momentum": 0.0,
+    "weight_decay": 0.0,
+    "module_wise_perturbation": false,
+    "overwrite_output_dir": true,
+    "scheduler": "cosine",
+    "num_training_steps": 20000,
+    "warmup_steps": 0,
+    "min_lr_ratio": 0.1,
+    "scheduler_cycle_length": 1,
+    "tensor_sampling_type": "standard_normal",
+    "matrix_sampling_type": "Random_baseline",
+    "params_ratio": 0.1,
+    "k_value": 5,
+    "variance": 1.0,
+    "use_grad_first": false,
+    "use_wandb": false
+  },
+  "search_space": {
+    "learning_rate": {
+      "type": "float",
+      "low": 1e-08,
+      "high": 0.001,
+      "log": true
+    },
+    "tau": {
+      "type": "float",
+      "low": 1e-06,
+      "high": 0.01,
+      "log": true,
+      "target_arg": "zo_eps"
+    }
+  }
+}

@@ -1,15 +1,19 @@
 #!/bin/bash
 
-export CUDA_VISIBLE_DEVICES=1
+cd "$(dirname "$0")/.."
+
+export CUDA_VISIBLE_DEVICES=3
 export WANDB_DISABLED="false"
 export WANDB_ENTITY="andrey"
 export WANDB_API_KEY=""
 export HF_TOKEN=""
 
 # Список значений learning_rate для перебора
-learning_rates=("3e-4")
+learning_rates=(
+    4e-8 
+)
 
-for lr in "${learning_rates[@]}"; do
+for mu_lr in "${learning_rates[@]}"; do
     # Формируем тег для output_dir и wandb (заменяем точку и 'e' на допустимые символы)
     TAG="lr_${lr//./_}"        # Заменяем '.' на '_' (например: 1e-3 → lr_1e-3, 0.01 → lr_0_01)
     TAG="${TAG//e/E}"          # Опционально: заменить 'e' на 'E' для читаемости
@@ -18,9 +22,11 @@ for lr in "${learning_rates[@]}"; do
 
     # Model and Task Configuration
     command+=" --model_name=\"roberta-large\""
-    command+=" --lora"
+    # command+=" --lora"
     command+=" --task_name=\"SST2\""
-    command+=" --trainer=\"sparse_jaguar_signsgd\""
+    command+=" --trainer=\"zo_rl_sgd\""
+
+    command+=" --use_grad_first=True"
 
     # Logging and Reporting
     command+=" --output_dir=\"result/SST2-FT-${TAG}\""
@@ -37,7 +43,7 @@ for lr in "${learning_rates[@]}"; do
     command+=" --save_strategy=\"steps\""
     command+=" --save_total_limit=1"
     command+=" --eval_steps=500"
-    command+=" --max_steps=40000"
+    command+=" --max_steps=20000"
     command+=" --save_steps=1000"
 
     # Dataset Settings
@@ -50,7 +56,7 @@ for lr in "${learning_rates[@]}"; do
     # Training Hyperparameters
     command+=" --perturbation_mode=\"two_side\""
     command+=" --zo_eps=1e-3"
-    command+=" --momentum=0.0"
+    command+=" --momentum=0.9"
     command+=" --weight_decay=0.0"
     command+=" --module_wise_perturbation=False"
 
@@ -58,9 +64,9 @@ for lr in "${learning_rates[@]}"; do
     command+=" --overwrite_output_dir"
 
     # Learning Rate Scheduler Settings
-    command+=" --learning_rate=${lr}"
+    command+=" --learning_rate=${mu_lr}"
     command+=" --scheduler=\"cosine\""
-    command+=" --num_training_steps=40000"
+    command+=" --num_training_steps=20000"
     command+=" --warmup_steps=0"
     command+=" --min_lr_ratio=0.1"
     command+=" --scheduler_cycle_length=1"
@@ -76,16 +82,18 @@ for lr in "${learning_rates[@]}"; do
     # Sparse Jaguar-Specific Parameters
     command+=" --params_ratio=0.1"
 
-    command+=" --lr_mu=1e-2"
+    command+=" --lr_mu=1e-3"
     command+=" --k_value=5"
     command+=" --variance=1"
     command+=" --use_grad_first=False"
 
+    command+=" --beta1=0.9"
+    command+=" --beta2=0.999"
+
+    # command+=" --log_to_file"
+
+    # command+=" --no_use_wandb"
+
     # Запуск команды
     eval "$command"
 done
-
-# 1. sparse signsgd tune 
-# - try use muon if bad 
-# 2. look up mu norm 
-# 3. params_ratio 

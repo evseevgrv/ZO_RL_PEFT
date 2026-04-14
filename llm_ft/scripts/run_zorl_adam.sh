@@ -1,13 +1,18 @@
 #!/bin/bash
 
-export CUDA_VISIBLE_DEVICES=1
+cd "$(dirname "$0")/.."
+
+export CUDA_VISIBLE_DEVICES=0
 export WANDB_DISABLED="false"
 export WANDB_ENTITY="andrey"
 export WANDB_API_KEY=""
 export HF_TOKEN=""
 
+# Список значений learning_rate для перебора
 learning_rates=(
-   4e-5 5e-5 
+    # "2e-3"
+    # "1e-3" "3e-3" "4e-3" "5e-3"
+    3e-5 4e-5 6e-6 7e-5
 )
 
 for lr in "${learning_rates[@]}"; do
@@ -18,10 +23,10 @@ for lr in "${learning_rates[@]}"; do
     command="python run.py"
 
     # Model and Task Configuration
-    command+=" --model_name=\"facebook/opt-13b\""
-    command+=" --lora"
-    command+=" --task_name=\"Copa\""
-    command+=" --trainer=\"zo_sgd\""
+    command+=" --model_name=\"roberta-large\""
+    # command+=" --lora"
+    command+=" --task_name=\"SST2\""
+    command+=" --trainer=\"zo_rl_adamm\""
 
     # Logging and Reporting
     command+=" --output_dir=\"result/SST2-FT-${TAG}\""
@@ -43,15 +48,15 @@ for lr in "${learning_rates[@]}"; do
 
     # Dataset Settings
     command+=" --num_eval=1000"
-    command+=" --num_train=1000000"
-    # command+=" --num_dev=100"
+    command+=" --num_train=1000"
+    command+=" --num_dev=500"
     command+=" --train_as_classification"
     command+=" --train_set_seed=0"
 
     # Training Hyperparameters
     command+=" --perturbation_mode=\"two_side\""
     command+=" --zo_eps=1e-3"
-    command+=" --momentum=0.9"
+    command+=" --momentum=0.0"
     command+=" --weight_decay=0.0"
     command+=" --module_wise_perturbation=False"
 
@@ -72,7 +77,7 @@ for lr in "${learning_rates[@]}"; do
 
     # Jaguar-Specific Parameters
     command+=" --zo_tau=1e-3"
-    command+=" --zo_beta=0.9"
+    command+=" --zo_beta=0.0"
 
     # Sparse Jaguar-Specific Parameters
     command+=" --params_ratio=0.1"
@@ -85,10 +90,11 @@ for lr in "${learning_rates[@]}"; do
     command+=" --beta1=0.9"
     command+=" --beta2=0.999"
 
-    # command+=" --log_to_file"
-
-    # command+=" --no_use_wandb"
-
     # Запуск команды
     eval "$command"
 done
+
+# 1. sparse signsgd tune 
+# - try use muon if bad 
+# 2. look up mu norm 
+# 3. params_ratio 

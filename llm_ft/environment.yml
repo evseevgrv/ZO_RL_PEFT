@@ -38,6 +38,7 @@ dependencies:
   - networkx=3.2.1
   - numba=0.58.1
   - numpy=1.26.2
+  - optuna>=4,<5
   - packaging=23.2
   - pandas=2.1.4
   - pip=23.3.2

@@ -1,5 +1,7 @@
 #!/bin/bash
 
+cd "$(dirname "$0")/.."
+
 export CUDA_VISIBLE_DEVICES=1
 export WANDB_DISABLED="false"
 export WANDB_ENTITY="andrey"

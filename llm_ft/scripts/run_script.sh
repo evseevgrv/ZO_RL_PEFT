@@ -1,34 +1,35 @@
 #!/bin/bash
 
-export CUDA_VISIBLE_DEVICES=7
+cd "$(dirname "$0")/.."
+
+export CUDA_VISIBLE_DEVICES=3
 export WANDB_DISABLED="false"
 export WANDB_ENTITY="andrey"
 export WANDB_API_KEY=""
 export HF_TOKEN=""
 
 learning_rates=(
-5e-5 6e-5 7e-5 8e-5 9e-5 1e-4 2e-4 3e-4 4e-4 5e-4
+    1e-6
 )
 
 for lr in "${learning_rates[@]}"; do
-    # Формируем тег для output_dir и wandb (заменяем точку и 'e' на допустимые символы)
-    TAG="lr_${lr//./_}"        # Заменяем '.' на '_' (например: 1e-3 → lr_1e-3, 0.01 → lr_0_01)
-    TAG="${TAG//e/E}"          # Опционально: заменить 'e' на 'E' для читаемости
+    TAG="lr_${lr//./_}"
+    TAG="${TAG//e/E}"
 
     command="python run.py"
 
     # Model and Task Configuration
-    command+=" --model_name=\"facebook/opt-13b\""
-    command+=" --lora"
-    command+=" --task_name=\"Copa\""
-    command+=" --trainer=\"zo_rl_adamm\""
+    command+=" --model_name=\"roberta-large\""
+    # command+=" --lora"
+    command+=" --task_name=\"SST2\""
+    command+=" --trainer=\"hizoo\""
 
     # Logging and Reporting
     command+=" --output_dir=\"result/SST2-FT-${TAG}\""
     command+=" --report_to=\"wandb\""
     command+=" --project_name=\"zo-rl\""
     command+=" --logging_steps=10"
-    command+=" --run_name=\"${TAG}\""  # Если run.py поддерживает --run_name
+    command+=" --run_name=\"${TAG}\""
 
     # Training Configuration
     command+=" --num_train_epochs=5"
@@ -41,10 +42,12 @@ for lr in "${learning_rates[@]}"; do
     command+=" --max_steps=20000"
     command+=" --save_steps=1000"
 
+    command+=" --max_length 512"
+
     # Dataset Settings
     command+=" --num_eval=1000"
-    command+=" --num_train=1000000"
-    # command+=" --num_dev=no"
+    command+=" --num_train=1000"
+    command+=" --num_dev=500"
     command+=" --train_as_classification"
     command+=" --train_set_seed=0"
 
@@ -77,7 +80,7 @@ for lr in "${learning_rates[@]}"; do
     # Sparse Jaguar-Specific Parameters
     command+=" --params_ratio=0.1"
 
-    command+=" --lr_mu=1e-3"
+    command+=" --lr_mu=1e-2"
     command+=" --k_value=5"
     command+=" --variance=1"
     command+=" --use_grad_first=False"
@@ -85,10 +88,5 @@ for lr in "${learning_rates[@]}"; do
     command+=" --beta1=0.9"
     command+=" --beta2=0.999"
 
-    # command+=" --log_to_file"
-
-    # command+=" --no_use_wandb"
-
-    # Запуск команды
     eval "$command"
 done

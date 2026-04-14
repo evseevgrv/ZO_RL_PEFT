@@ -27,6 +27,7 @@ multiprocess==0.70.15
 networkx
 numba==0.58.1
 numpy
+optuna>=4,<5
 packaging==23.2
 pandas
 pip==23.3.2

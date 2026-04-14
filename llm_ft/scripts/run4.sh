@@ -1,5 +1,7 @@
 #!/bin/bash
 
+cd "$(dirname "$0")/.."
+
 export CUDA_VISIBLE_DEVICES=3
 export WANDB_DISABLED="false"
 export WANDB_ENTITY="andrey"
@@ -21,7 +23,7 @@ for lr in "${learning_rates[@]}"; do
     command+=" --model_name=\"meta-llama/Llama-2-7b-hf\""
     command+=" --lora"
     command+=" --task_name=\"Copa\""
-    command+=" --trainer=\"zo_rl_adamm\""
+    command+=" --trainer=\"zo_rl_sgd\""
 
     # Logging and Reporting
     command+=" --output_dir=\"result/SST2-FT-${TAG}\""
