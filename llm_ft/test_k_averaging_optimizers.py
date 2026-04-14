@@ -21,6 +21,9 @@ from k_utils import resolve_k_value
 from optimizers.jaguar_signsgd import Jaguar_SignSGD
 from optimizers.sparse_jaguar_signsgd import Sparse_Jaguar_SignSGD
 from optimizers.zo_adamm import ZO_AdaMM
+from optimizers.zo_rl_jaguar import ZO_RL_Jaguar
+from optimizers.zo_rl_adamm import ZO_RL_AdaMM
+from optimizers.zo_rl_sgd import ZO_RL_SGD
 from optimizers.zo_sgd import ZO_SGD
 
 
@@ -114,6 +117,36 @@ def test_zo_sgd_matches_manual_probe_average(monkeypatch, k, seeds):
     assert torch.allclose(param.detach(), expected_param, atol=1e-6, rtol=1e-6)
 
 
+def test_zo_sgd_replays_distinct_param_vectors_for_update(monkeypatch):
+    _patch_randint(monkeypatch, [123])
+
+    param_a = torch.nn.Parameter(torch.tensor([0.3, -0.2], dtype=torch.float32))
+    param_b = torch.nn.Parameter(torch.tensor([0.5, -0.1], dtype=torch.float32))
+    optimizer = ZO_SGD([param_a, param_b], lr=0.1, eps=1e-3, momentum=0.0, k=1)
+
+    sample_calls = []
+    original_sample = optimizer.tensor_sampler.sample
+
+    def recording_sample(param_shape, generator=None, sampler_type=None):
+        z = original_sample(param_shape, generator=generator, sampler_type=sampler_type)
+        sample_calls.append(z.detach().clone().cpu())
+        return z
+
+    monkeypatch.setattr(optimizer.tensor_sampler, "sample", recording_sample)
+
+    def closure():
+        return param_a.square().sum() + param_b.square().sum()
+
+    optimizer.step(closure)
+
+    assert len(sample_calls) == 8
+    assert not torch.allclose(sample_calls[0], sample_calls[1])
+    for param_offset in (0, 1):
+        assert torch.allclose(sample_calls[param_offset], sample_calls[param_offset + 2])
+        assert torch.allclose(sample_calls[param_offset], sample_calls[param_offset + 4])
+        assert torch.allclose(sample_calls[param_offset], sample_calls[param_offset + 6])
+
+
 @pytest.mark.parametrize("k,seeds", [(1, [321]), (2, [321, 654])])
 def test_zo_adamm_matches_manual_probe_average(monkeypatch, k, seeds):
     _patch_randint(monkeypatch, seeds)
@@ -133,6 +166,36 @@ def test_zo_adamm_matches_manual_probe_average(monkeypatch, k, seeds):
     assert calls["count"] == 2 * k
     assert torch.allclose(returned_loss, expected_loss)
     assert torch.allclose(param.detach(), expected_param, atol=1e-6, rtol=1e-6)
+
+
+def test_zo_adamm_replays_distinct_param_vectors_for_update(monkeypatch):
+    _patch_randint(monkeypatch, [321])
+
+    param_a = torch.nn.Parameter(torch.tensor([0.4, -0.1], dtype=torch.float32))
+    param_b = torch.nn.Parameter(torch.tensor([0.2, -0.3], dtype=torch.float32))
+    optimizer = ZO_AdaMM([param_a, param_b], lr=0.05, eps=1e-3, k=1)
+
+    sample_calls = []
+    original_sample = optimizer.tensor_sampler.sample
+
+    def recording_sample(param_shape, generator=None, sampler_type=None):
+        z = original_sample(param_shape, generator=generator, sampler_type=sampler_type)
+        sample_calls.append(z.detach().clone().cpu())
+        return z
+
+    monkeypatch.setattr(optimizer.tensor_sampler, "sample", recording_sample)
+
+    def closure():
+        return param_a.square().sum() + param_b.square().sum()
+
+    optimizer.step(closure)
+
+    assert len(sample_calls) == 8
+    assert not torch.allclose(sample_calls[0], sample_calls[1])
+    for param_offset in (0, 1):
+        assert torch.allclose(sample_calls[param_offset], sample_calls[param_offset + 2])
+        assert torch.allclose(sample_calls[param_offset], sample_calls[param_offset + 4])
+        assert torch.allclose(sample_calls[param_offset], sample_calls[param_offset + 6])
 
 
 @pytest.mark.parametrize("k,seeds", [(1, [11]), (2, [11, 29])])
@@ -195,6 +258,192 @@ def test_sparse_jaguar_signsgd_matches_manual_probe_average(monkeypatch, k, seed
     assert torch.allclose(returned_loss, expected_loss)
     assert torch.allclose(optimizer.state[param]["grad_accum"], expected_grad_accum, atol=1e-6, rtol=1e-6)
     assert torch.allclose(param.detach(), expected_param, atol=1e-6, rtol=1e-6)
+
+
+def test_zo_rl_jaguar_replays_candidate_vectors_for_sparse_update(monkeypatch):
+    _patch_randint(monkeypatch, [101, 11, 29])
+
+    param_a = torch.nn.Parameter(torch.tensor([0.2, -0.4], dtype=torch.float32))
+    param_b = torch.nn.Parameter(torch.tensor([0.7, -0.1], dtype=torch.float32))
+    optimizer = ZO_RL_Jaguar(
+        [param_a, param_b],
+        lr=0.05,
+        eps=1e-3,
+        beta=0.9,
+        params_ratio=1.0,
+        variance=1.0,
+        lr_mu=0.1,
+        k=2,
+    )
+
+    sample_calls = []
+    original_sample = optimizer.tensor_sampler.sample
+
+    def recording_sample(param_shape, generator=None, sampler_type=None):
+        z = original_sample(param_shape, generator=generator, sampler_type=sampler_type)
+        sample_calls.append(z.detach().clone().cpu())
+        return z
+
+    monkeypatch.setattr(optimizer.tensor_sampler, "sample", recording_sample)
+
+    def closure():
+        return param_a.square().sum() + param_b.square().sum()
+
+    optimizer.step(closure)
+
+    seed_offsets = {11: 0, 29: 4}
+    optimal_offset = seed_offsets[optimizer.zo_random_seed]
+
+    assert len(sample_calls) == 20
+    assert not torch.allclose(sample_calls[0], sample_calls[1])
+
+    for param_offset in (0, 1):
+        assert torch.allclose(sample_calls[param_offset], sample_calls[param_offset + 2])
+        assert torch.allclose(sample_calls[param_offset + 4], sample_calls[param_offset + 6])
+
+        assert torch.allclose(sample_calls[optimal_offset + param_offset], sample_calls[8 + param_offset])
+        assert torch.allclose(sample_calls[optimal_offset + param_offset], sample_calls[10 + param_offset])
+        assert torch.allclose(sample_calls[optimal_offset + param_offset], sample_calls[12 + param_offset])
+        assert torch.allclose(sample_calls[optimal_offset + param_offset], sample_calls[14 + param_offset])
+
+        assert torch.allclose(sample_calls[param_offset], sample_calls[16 + param_offset])
+        assert torch.allclose(sample_calls[4 + param_offset], sample_calls[18 + param_offset])
+
+
+def test_zo_rl_jaguar_reuses_selected_params_across_k(monkeypatch):
+    _patch_randint(monkeypatch, [101, 11, 29, 47])
+
+    param_a0 = torch.tensor([0.2, -0.4], dtype=torch.float32)
+    param_b0 = torch.tensor([0.7, -0.1], dtype=torch.float32)
+    param_a = torch.nn.Parameter(param_a0.clone())
+    param_b = torch.nn.Parameter(param_b0.clone())
+    optimizer = ZO_RL_Jaguar(
+        [param_a, param_b],
+        lr=0.05,
+        eps=1e-3,
+        beta=0.9,
+        params_ratio=0.5,
+        variance=1.0,
+        lr_mu=0.1,
+        k=3,
+    )
+
+    selected_calls = {"count": 0}
+
+    def fixed_selected_param_ids(params_ratio=0.1):
+        selected_calls["count"] += 1
+        return {id(param_a)}
+
+    monkeypatch.setattr(optimizer, "_sample_selected_param_ids", fixed_selected_param_ids)
+
+    closure_calls = {"count": 0}
+
+    def closure():
+        closure_calls["count"] += 1
+        return param_a.square().sum() + param_b.square().sum()
+
+    optimizer.step(closure)
+
+    assert selected_calls["count"] == 1
+    assert closure_calls["count"] == 5
+    assert torch.allclose(param_b.detach(), param_b0)
+
+
+def test_zo_rl_sgd_replays_candidate_vectors_for_mu_update(monkeypatch):
+    _patch_randint(monkeypatch, [11, 29])
+
+    param_a = torch.nn.Parameter(torch.tensor([0.2, -0.4], dtype=torch.float32))
+    param_b = torch.nn.Parameter(torch.tensor([0.7, -0.1], dtype=torch.float32))
+    optimizer = ZO_RL_SGD(
+        [param_a, param_b],
+        lr=0.05,
+        eps=1e-3,
+        momentum=0.0,
+        variance=1.0,
+        lr_mu=0.1,
+        k=2,
+    )
+
+    sample_calls = []
+    original_sample = optimizer.tensor_sampler.sample
+
+    def recording_sample(param_shape, generator=None, sampler_type=None):
+        z = original_sample(param_shape, generator=generator, sampler_type=sampler_type)
+        sample_calls.append(z.detach().clone().cpu())
+        return z
+
+    monkeypatch.setattr(optimizer.tensor_sampler, "sample", recording_sample)
+
+    def closure():
+        return param_a.square().sum() + param_b.square().sum()
+
+    optimizer.step(closure)
+
+    seed_offsets = {11: 0, 29: 4}
+    optimal_offset = seed_offsets[optimizer.zo_random_seed]
+
+    assert len(sample_calls) == 20
+    assert not torch.allclose(sample_calls[0], sample_calls[1])
+
+    for param_offset in (0, 1):
+        assert torch.allclose(sample_calls[param_offset], sample_calls[param_offset + 2])
+        assert torch.allclose(sample_calls[param_offset + 4], sample_calls[param_offset + 6])
+
+        assert torch.allclose(sample_calls[optimal_offset + param_offset], sample_calls[8 + param_offset])
+        assert torch.allclose(sample_calls[optimal_offset + param_offset], sample_calls[10 + param_offset])
+        assert torch.allclose(sample_calls[optimal_offset + param_offset], sample_calls[12 + param_offset])
+        assert torch.allclose(sample_calls[optimal_offset + param_offset], sample_calls[14 + param_offset])
+
+        assert torch.allclose(sample_calls[param_offset], sample_calls[16 + param_offset])
+        assert torch.allclose(sample_calls[4 + param_offset], sample_calls[18 + param_offset])
+
+
+def test_zo_rl_adamm_replays_candidate_vectors_for_mu_update(monkeypatch):
+    _patch_randint(monkeypatch, [13, 31])
+
+    param_a = torch.nn.Parameter(torch.tensor([0.25, -0.35], dtype=torch.float32))
+    param_b = torch.nn.Parameter(torch.tensor([0.6, -0.15], dtype=torch.float32))
+    optimizer = ZO_RL_AdaMM(
+        [param_a, param_b],
+        lr=0.05,
+        eps=1e-3,
+        variance=1.0,
+        lr_mu=0.1,
+        k=2,
+    )
+
+    sample_calls = []
+    original_sample = optimizer.tensor_sampler.sample
+
+    def recording_sample(param_shape, generator=None, sampler_type=None):
+        z = original_sample(param_shape, generator=generator, sampler_type=sampler_type)
+        sample_calls.append(z.detach().clone().cpu())
+        return z
+
+    monkeypatch.setattr(optimizer.tensor_sampler, "sample", recording_sample)
+
+    def closure():
+        return param_a.square().sum() + param_b.square().sum()
+
+    optimizer.step(closure)
+
+    seed_offsets = {13: 0, 31: 4}
+    optimal_offset = seed_offsets[optimizer.zo_random_seed]
+
+    assert len(sample_calls) == 20
+    assert not torch.allclose(sample_calls[0], sample_calls[1])
+
+    for param_offset in (0, 1):
+        assert torch.allclose(sample_calls[param_offset], sample_calls[param_offset + 2])
+        assert torch.allclose(sample_calls[param_offset + 4], sample_calls[param_offset + 6])
+
+        assert torch.allclose(sample_calls[optimal_offset + param_offset], sample_calls[8 + param_offset])
+        assert torch.allclose(sample_calls[optimal_offset + param_offset], sample_calls[10 + param_offset])
+        assert torch.allclose(sample_calls[optimal_offset + param_offset], sample_calls[12 + param_offset])
+        assert torch.allclose(sample_calls[optimal_offset + param_offset], sample_calls[14 + param_offset])
+
+        assert torch.allclose(sample_calls[param_offset], sample_calls[16 + param_offset])
+        assert torch.allclose(sample_calls[4 + param_offset], sample_calls[18 + param_offset])
 
 
 def test_sparse_jaguar_signsgd_reuses_probe_vectors_for_update(monkeypatch):
@@ -277,7 +526,7 @@ def test_resolve_k_value_defaults():
     assert resolve_k_value("zo_adamm", None) == 1
     assert resolve_k_value("jaguar_signsgd", None) == 1
     assert resolve_k_value("sparse_jaguar_signsgd", None) == 1
-    assert resolve_k_value("zo_rl", None) == 10
+    assert resolve_k_value("zo_rl_jaguar", None) == 10
     assert resolve_k_value("zo_rl_sgd", None) == 10
     assert resolve_k_value("zo_rl_adamm", None) == 10
     assert resolve_k_value("hizoo_rl", None) == 10

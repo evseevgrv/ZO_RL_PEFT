@@ -1,7 +1,7 @@
 from typing import Optional
 
 
-RL_STYLE_K_TRAINERS = {"zo_rl", "zo_rl_sgd", "zo_rl_adamm", "hizoo_rl", "mezo_svrg_rl"}
+RL_STYLE_K_TRAINERS = {"zo_rl_jaguar", "zo_rl_sgd", "zo_rl_adamm", "hizoo_rl", "mezo_svrg_rl"}
 
 
 def resolve_k_value(trainer_name: Optional[str], k_value: Optional[int]) -> int:

@@ -487,10 +487,10 @@ class OurTrainer(Trainer):
             self.optimizer = Sparse_Jaguar_SignSGD(params, lr=args.learning_rate, eps=args.zo_eps, beta=args.zo_beta, perturbation_mode=args.perturbation_mode, tensor_sampling_type=args.tensor_sampling_type, matrix_sampling_type=args.matrix_sampling_type, params_ratio=args.params_ratio, k=effective_k, evaluate_memory=args.evaluate_memory)
         elif args.trainer == "sparse_jaguar_muon":
             self.optimizer = Sparse_Jaguar_MUON(params, lr=args.learning_rate, eps=args.zo_eps, beta=args.zo_beta, perturbation_mode=args.perturbation_mode, tensor_sampling_type=args.tensor_sampling_type, matrix_sampling_type=args.matrix_sampling_type, params_ratio=args.params_ratio)
-        elif args.trainer == "zo_rl":
+        elif args.trainer == "zo_rl_jaguar":
             if args.use_grad_first:
                 self._compute_initial_grads_for_mu(train_dataloader)
-            self.optimizer = ZO_RL(
+            self.optimizer = ZO_RL_Jaguar(
                 params=params, 
                 lr=args.learning_rate, 
                 eps=args.zo_eps, 
@@ -550,6 +550,7 @@ class OurTrainer(Trainer):
                 params=params, 
                 lr=args.learning_rate, 
                 eps=args.zo_eps, 
+                weight_decay=args.weight_decay,
                 betas=(args.beta1, args.beta2), 
                 perturbation_mode=args.perturbation_mode, 
                 tensor_sampling_type=args.tensor_sampling_type, 
@@ -659,6 +660,7 @@ class OurTrainer(Trainer):
                 params=params, 
                 lr=args.learning_rate, 
                 eps=args.zo_eps, 
+                weight_decay=args.weight_decay,
                 betas=(args.beta1, args.beta2), 
                 perturbation_mode=args.perturbation_mode, 
                 tensor_sampling_type=args.tensor_sampling_type, 

@@ -40,6 +40,9 @@ class ZO_AdaMM(ZeroOrderOptimizer):
 
     @torch.no_grad()
     def step(self, closure=None):
+        if closure is None:
+            raise ValueError("ZO_AdaMM requires a closure")
+
         loss_plus_values = []
         projected_grads = []
         probe_seeds = []
@@ -75,16 +78,19 @@ class ZO_AdaMM(ZeroOrderOptimizer):
             for group in self.param_groups:
                 eps = group['eps']
                 for p in group['params']:
-                    z = torch.normal(mean=0, std=1, size=p.shape, device=p.device, generator=self.generator)
+                    z = self._sample_direction(p)
                     grad_sums[p].add_(z * (projected_grad / (eps * self.k)))
 
         for group in self.param_groups:
             beta1, beta2 = group['betas']
             lr = group['lr']
+            weight_decay = group['weight_decay']
             for p in group['params']:
                 state = self.state[p]
                 state['step'] += 1
                 grad = grad_sums[p]
+                if weight_decay is not None and weight_decay != 0:
+                    grad = grad.add(p.data, alpha=weight_decay)
     
                 # Do the AdaMM updates
                 state['exp_avg'].mul_(beta1).add_(grad, alpha=(1.0 - beta1))
@@ -97,6 +103,15 @@ class ZO_AdaMM(ZeroOrderOptimizer):
                 p.data.addcdiv_(state['exp_avg'], state['max_exp_avg_sq'].sqrt().add_(1e-10), value=(-lr))
 
         return torch.stack(loss_plus_values).mean()
+
+    def _sample_direction(self, param):
+        tensor_sampling_type = self.state[param]['tensor_sampling_type']
+        z = self.tensor_sampler.sample(
+            param.shape,
+            generator=self.generator,
+            sampler_type=tensor_sampling_type,
+        )
+        return z.to(device=param.device, dtype=param.dtype)
     
     def _mu_pertrub(self, scaling_factor: float = 1.0):
         for group in self.param_groups:
@@ -110,5 +125,5 @@ class ZO_AdaMM(ZeroOrderOptimizer):
                 #     state['seed'] = np.random.randint(1_000_000_000)
                 # seed = state['seed'] 
                 # self.generator.manual_seed(seed)
-                z = torch.normal(mean=0, std=1, size=param.shape, device=param.device, generator=self.generator)
+                z = self._sample_direction(param)
                 param.data.add_(z * eps * scaling_factor)

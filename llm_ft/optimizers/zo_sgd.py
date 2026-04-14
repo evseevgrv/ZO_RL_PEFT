@@ -39,6 +39,9 @@ class ZO_SGD(ZeroOrderOptimizer):
         
     @torch.no_grad()
     def step(self, closure=None):
+        if closure is None:
+            raise ValueError("ZO_SGD requires a closure")
+
         loss_plus_values = []
         projected_grads = []
         probe_seeds = []
@@ -77,18 +80,21 @@ class ZO_SGD(ZeroOrderOptimizer):
             for group in self.param_groups:
                 eps = group['eps']
                 for param in group['params']:
-                    z = torch.normal(mean=0, std=1, size=param.shape, device=param.device, generator=self.generator)
+                    z = self._sample_direction(param)
                     grad_sums[param].add_(z * (projected_grad / (eps * self.k)))
 
         for group in self.param_groups:
             lr = group['lr']
             momentum = group['momentum']
+            weight_decay = group['weight_decay']
             
             for param in group['params']:
                 state = self.state[param]
                 state['step'] += 1
 
                 grad = grad_sums[param]
+                if weight_decay is not None and weight_decay != 0:
+                    grad = grad.add(param.data, alpha=weight_decay)
                 if momentum is not None and momentum != 0:
                     if 'momentum_buffer' not in state:
                         buf = state['momentum_buffer'] = torch.clone(grad).detach()
@@ -101,11 +107,19 @@ class ZO_SGD(ZeroOrderOptimizer):
                 param.data.add_(update, alpha=-lr)
                 
         return torch.stack(loss_plus_values).mean()
+
+    def _sample_direction(self, param):
+        tensor_sampling_type = self.state[param]['tensor_sampling_type']
+        z = self.tensor_sampler.sample(
+            param.shape,
+            generator=self.generator,
+            sampler_type=tensor_sampling_type,
+        )
+        return z.to(device=param.device, dtype=param.dtype)
     
     def _mu_pertrub(self, scaling_factor: float = 1.0):
         for group in self.param_groups:
             eps = group['eps']
             for param in group['params']:
-                state = self.state[param]
-                z = torch.normal(mean=0, std=1, size=param.shape, device=param.device, generator=self.generator)
+                z = self._sample_direction(param)
                 param.data.add_(z * eps * scaling_factor)

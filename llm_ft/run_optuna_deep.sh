@@ -6,7 +6,7 @@
 set -e  # Exit on error
 
 echo "╔════════════════════════════════════════════════════════════════╗"
-echo "║     Optuna Deep Hyperparameter Optimization - ZO-RL           ║"
+echo "║  Optuna Deep Hyperparameter Optimization - ZO-RL-Jaguar       ║"
 echo "╚════════════════════════════════════════════════════════════════╝"
 echo ""
 
@@ -19,12 +19,12 @@ export HF_TOKEN=""  # Если нужен
 
 # Optuna Configuration
 N_TRIALS=50  # Количество экспериментов для глубокого исследования
-STUDY_NAME="zo_rl_deep_$(date +%Y%m%d_%H%M%S)"
+STUDY_NAME="zo_rl_jaguar_deep_$(date +%Y%m%d_%H%M%S)"
 STORAGE="sqlite:///optuna_deep.db"
 
 echo "Настройки:"
 echo "  GPU: $CUDA_VISIBLE_DEVICES"
-echo "  WandB Project: zo-rl-optuna"
+echo "  WandB Project: zo-rl-jaguar-optuna"
 echo "  WandB Entity: $WANDB_ENTITY"
 echo "  Количество trials: $N_TRIALS"
 echo "  Study name: $STUDY_NAME"
@@ -97,8 +97,6 @@ else
 fi
 
 echo "════════════════════════════════════════════════════════════════"
-
-
 
 
 

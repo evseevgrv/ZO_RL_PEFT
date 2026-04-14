@@ -19,7 +19,7 @@ trainers=(
     # "zo_rl_adamm"
     "sparse_jaguar_signsgd"
     "sparse_jaguar_signsgd"
-    "zo_rl"
+    "zo_rl_jaguar"
 )
 
 k_values=(
@@ -43,7 +43,7 @@ run_names=(
     # "zo_rl_adamm_k5"
     "sparse_jaguar_signsgd_k1"
     "sparse_jaguar_signsgd_k5"
-    "zo_rl_k5"
+    "zo_rl_jaguar_k5"
 )
 
 for lr in "${learning_rates[@]}"; do

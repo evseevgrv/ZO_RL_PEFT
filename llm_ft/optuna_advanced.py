@@ -100,13 +100,13 @@ def run_training(trial: Trial, config: dict) -> float:
         f"--model_name={config.get('model_name', 'roberta-large')}",
         "--lora",
         f"--task_name={config.get('task_name', 'SST2')}",
-        f"--trainer={config.get('trainer', 'zo_rl')}",
+        f"--trainer={config.get('trainer', 'zo_rl_jaguar')}",
         
         # Logging and Reporting
         f"--tag={tag}",  # Short tag to avoid "File name too long"
         "--output_dir=result/dummy",  # Will be overwritten by run.py with result/{tag}
         "--report_to=wandb",
-        f"--project_name={config.get('project_name', 'zo-rl-optuna')}",
+        f"--project_name={config.get('project_name', 'zo-rl-jaguar-optuna')}",
         f"--logging_steps={config.get('logging_steps', 10)}",
         f"--run_name={tag}",
         
@@ -273,7 +273,7 @@ def main():
     })
     
     # Generate study name if not provided
-    study_name = args.study_name or f"zo_rl_tuning_{int(time.time())}"
+    study_name = args.study_name or f"zo_rl_jaguar_tuning_{int(time.time())}"
     
     # Create or load study
     if args.storage:
@@ -401,4 +401,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

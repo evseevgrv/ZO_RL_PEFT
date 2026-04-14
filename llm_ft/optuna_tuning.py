@@ -44,13 +44,13 @@ def objective(trial: Trial) -> float:
         "--model_name=roberta-large",
         "--lora",
         "--task_name=SST2",
-        "--trainer=zo_rl",
+        "--trainer=zo_rl_jaguar",
         
         # Logging and Reporting
         f"--tag={tag}",  # Short tag to avoid "File name too long"
         "--output_dir=result/dummy",  # Will be overwritten by run.py with result/{tag}
         "--report_to=wandb",
-        "--project_name=zo-rl-optuna",
+        "--project_name=zo-rl-jaguar-optuna",
         "--logging_steps=10",
         f"--run_name={tag}",
         
@@ -177,7 +177,7 @@ def objective(trial: Trial) -> float:
 def main():
     parser = argparse.ArgumentParser(description="Optuna hyperparameter tuning")
     parser.add_argument("--n_trials", type=int, default=20, help="Number of trials to run")
-    parser.add_argument("--study_name", type=str, default="zo_rl_tuning", help="Name of the Optuna study")
+    parser.add_argument("--study_name", type=str, default="zo_rl_jaguar_tuning", help="Name of the Optuna study")
     parser.add_argument("--storage", type=str, default=None, help="Storage URL for Optuna study (e.g., sqlite:///optuna.db)")
     parser.add_argument("--load_if_exists", action="store_true", help="Load study if it exists")
     args = parser.parse_args()
@@ -238,4 +238,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
