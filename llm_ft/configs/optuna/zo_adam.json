@@ -28,6 +28,7 @@
     "momentum": 0.0,
     "weight_decay": 0.0,
     "module_wise_perturbation": false,
+    "output_dir": "result/optuna_trial",
     "overwrite_output_dir": true,
     "scheduler": "cosine",
     "num_training_steps": 20000,

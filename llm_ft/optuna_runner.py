@@ -63,6 +63,7 @@ DEFAULT_BASE_ARGS: Dict[str, Any] = {
     "momentum": 0.0,
     "weight_decay": 0.0,
     "module_wise_perturbation": False,
+    "output_dir": "result/optuna_trial",
     "overwrite_output_dir": True,
     "scheduler": "cosine",
     "num_training_steps": 20000,
@@ -342,9 +343,10 @@ def build_command(
     trial_args = target_trial_args(trial_params, search_space)
     tag = make_trial_tag(config, study_slug, trial_number)
 
-    # run.py overwrites run_name/output_dir from tag; keep tag controlled here.
+    # run.py requires output_dir at parse time and then overwrites it from tag.
     base_args.pop("tag", None)
     base_args["tag"] = tag
+    base_args["output_dir"] = f"result/{tag}"
     base_args.update(trial_args)
 
     command = [sys.executable, "run.py"]
