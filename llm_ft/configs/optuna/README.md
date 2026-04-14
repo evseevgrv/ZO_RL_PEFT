@@ -6,6 +6,14 @@ Use from `llm_ft`:
 ./scripts/run_optuna.sh --config configs/optuna/zo_rl_jaguar.json
 ```
 
+Per-trial local logging is enabled by default. To keep only the final
+`best_params.json` summary with the best Optuna parameters and their
+`test_accuracy`, run:
+
+```bash
+LOG_TRIALS=false ./scripts/run_optuna.sh --config configs/optuna/zo_rl_jaguar.json
+```
+
 Each config is self-contained: `base_args` explicitly includes fixed launch
 parameters such as `model_name`, `task_name`, dataset sizes, logging settings,
 scheduler settings, `max_steps: 20000`, `num_training_steps: 20000`, and

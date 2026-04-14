@@ -28,10 +28,35 @@ if [ "${LOAD_IF_EXISTS:-0}" = "1" ]; then
     LOAD_ARGS=(--load_if_exists)
 fi
 
+HAS_LOG_TRIALS_ARG=0
+for arg in "$@"; do
+    if [ "$arg" = "--log_trials" ] || [ "$arg" = "--no_log_trials" ]; then
+        HAS_LOG_TRIALS_ARG=1
+        break
+    fi
+done
+
+LOG_TRIALS_ARGS=()
+if [ "$HAS_LOG_TRIALS_ARG" = "0" ]; then
+    case "$(printf '%s' "${LOG_TRIALS:-true}" | tr '[:upper:]' '[:lower:]')" in
+        true|1|yes|y)
+            LOG_TRIALS_ARGS=(--log_trials)
+            ;;
+        false|0|no|n)
+            LOG_TRIALS_ARGS=(--no_log_trials)
+            ;;
+        *)
+            echo "Invalid LOG_TRIALS=${LOG_TRIALS}. Use true or false." >&2
+            exit 2
+            ;;
+    esac
+fi
+
 "$PYTHON_BIN" optuna_runner.py \
     --n_trials "$N_TRIALS" \
     --study_name "$STUDY_NAME" \
     "${CONFIG_ARGS[@]}" \
     "${STORAGE_ARGS[@]}" \
     "${LOAD_ARGS[@]}" \
+    "${LOG_TRIALS_ARGS[@]}" \
     "$@"

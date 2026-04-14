@@ -17,6 +17,7 @@ import os
 from pathlib import Path
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import time
@@ -400,65 +401,111 @@ def failure_value(direction: str) -> float:
     return 1e30 if direction == "minimize" else -1e30
 
 
+def read_log_tail(path: Path, max_lines: int = 40) -> str:
+    if not path.exists():
+        return ""
+    try:
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError as exc:
+        return f"<could not read {path}: {exc}>"
+    return "\n".join(lines[-max_lines:])
+
+
+def log_trial_failure_details(trial_number: int, trial_dir: Path) -> None:
+    stderr_tail = read_log_tail(trial_dir / "stderr.log")
+    stdout_tail = read_log_tail(trial_dir / "stdout.log")
+
+    if stderr_tail:
+        LOGGER.error("Trial %s stderr tail:\n%s", trial_number, stderr_tail)
+    if stdout_tail:
+        LOGGER.error("Trial %s stdout tail:\n%s", trial_number, stdout_tail)
+
+
 def run_training_trial(
     trial: Any,
     config: Mapping[str, Any],
     study_slug: str,
     results_root: Path,
+    log_trials: bool,
 ) -> float:
     trial_params = sample_trial_params(trial, config["search_space"])
     command, trial_args, tag = build_command(config, trial_params, study_slug, trial.number)
     trial_dir = results_root / f"trial_{trial.number}"
-    trial_dir.mkdir(parents=True, exist_ok=True)
+    if log_trials:
+        trial_dir.mkdir(parents=True, exist_ok=True)
 
     LOGGER.info("Starting trial %s with params: %s", trial.number, trial_params)
     LOGGER.info("Trial %s command: %s", trial.number, shlex.join(command))
 
-    write_json(trial_dir / "params.json", {
-        "trial_params": trial_params,
-        "target_args": trial_args,
-        "tag": tag,
-    })
-    write_json(trial_dir / "command.json", command)
-    (trial_dir / "command.txt").write_text(shlex.join(command) + "\n", encoding="utf-8")
+    if log_trials:
+        write_json(trial_dir / "params.json", {
+            "trial_params": trial_params,
+            "target_args": trial_args,
+            "tag": tag,
+        })
+        write_json(trial_dir / "command.json", command)
+        (trial_dir / "command.txt").write_text(shlex.join(command) + "\n", encoding="utf-8")
 
     env = os.environ.copy()
     env.update({str(key): str(value) for key, value in config.get("env", {}).items()})
 
-    with (trial_dir / "stdout.log").open("w", encoding="utf-8") as stdout_file, (
-        trial_dir / "stderr.log"
-    ).open("w", encoding="utf-8") as stderr_file:
+    if log_trials:
+        stdout_target = (trial_dir / "stdout.log").open("w", encoding="utf-8")
+        stderr_target = (trial_dir / "stderr.log").open("w", encoding="utf-8")
+    else:
+        stdout_target = subprocess.DEVNULL
+        stderr_target = subprocess.DEVNULL
+
+    try:
         result = subprocess.run(
             command,
             cwd=str(SCRIPT_DIR),
             env=env,
-            stdout=stdout_file,
-            stderr=stderr_file,
+            stdout=stdout_target,
+            stderr=stderr_target,
             text=True,
             check=False,
         )
+    finally:
+        if log_trials:
+            stdout_target.close()
+            stderr_target.close()
 
     if result.returncode != 0:
-        LOGGER.error(
-            "Trial %s failed with return code %s. See %s",
-            trial.number,
-            result.returncode,
-            trial_dir,
-        )
+        if log_trials:
+            LOGGER.error(
+                "Trial %s failed with return code %s. See %s",
+                trial.number,
+                result.returncode,
+                trial_dir,
+            )
+            log_trial_failure_details(trial.number, trial_dir)
+        else:
+            LOGGER.error(
+                "Trial %s failed with return code %s. Re-run with LOG_TRIALS=true for local logs.",
+                trial.number,
+                result.returncode,
+            )
+            shutil.rmtree(trial_dir, ignore_errors=True)
         return failure_value(str(config.get("direction", DEFAULT_DIRECTION)))
 
     result_file = SCRIPT_DIR / "result" / tag / "results.json"
     if not result_file.exists():
         LOGGER.error("Trial %s result file not found: %s", trial.number, result_file)
+        if not log_trials:
+            shutil.rmtree(trial_dir, ignore_errors=True)
         return failure_value(str(config.get("direction", DEFAULT_DIRECTION)))
 
     results = load_json(result_file)
-    write_json(trial_dir / "metrics.json", results)
+    if log_trials:
+        write_json(trial_dir / "metrics.json", results)
 
     try:
         metric_key, metric_value = extract_metric(results, config)
     except KeyError as exc:
         LOGGER.error("Trial %s has no target metric: %s", trial.number, exc)
+        if not log_trials:
+            shutil.rmtree(trial_dir, ignore_errors=True)
         return failure_value(str(config.get("direction", DEFAULT_DIRECTION)))
 
     trial.set_user_attr("metric_key", metric_key)
@@ -472,6 +519,8 @@ def run_training_trial(
         metric_key,
         metric_value,
     )
+    if not log_trials:
+        shutil.rmtree(trial_dir, ignore_errors=True)
     return metric_value
 
 
@@ -482,26 +531,61 @@ def write_json(path: Path, data: Any) -> None:
         handle.write("\n")
 
 
-def make_study_summary(study: Any, study_name: str, study_slug: str, config: Mapping[str, Any]) -> Dict[str, Any]:
+def make_study_summary(
+    study: Any,
+    study_name: str,
+    study_slug: str,
+    config: Mapping[str, Any],
+    log_trials: bool,
+) -> Dict[str, Any]:
     try:
         best_trial = study.best_trial
+        best_test_accuracy = best_trial.user_attrs.get("test_accuracy")
+        if best_test_accuracy is None:
+            best_test_accuracy = best_trial.user_attrs.get("accuracy")
         best_summary = {
             "number": best_trial.number,
             "value": best_trial.value,
             "params": best_trial.params,
             "target_args": target_trial_args(best_trial.params, config["search_space"]),
+            "test_accuracy": best_test_accuracy,
             "user_attrs": best_trial.user_attrs,
         }
     except ValueError:
         best_summary = None
 
-    return {
+    if not log_trials:
+        summary = {
+            "study_name": study_name,
+            "study_slug": study_slug,
+            "optimized_metric_key": config.get("metric_key", DEFAULT_METRIC_KEY),
+        }
+        if best_summary is not None:
+            summary.update({
+                "best_trial_number": best_summary["number"],
+                "best_params": best_summary["params"],
+                "best_target_args": best_summary["target_args"],
+                "optimized_metric_value": best_summary["value"],
+                "test_accuracy": best_summary["test_accuracy"],
+            })
+        return summary
+
+    summary = {
         "study_name": study_name,
         "study_slug": study_slug,
         "direction": config.get("direction", DEFAULT_DIRECTION),
         "metric_key": config.get("metric_key", DEFAULT_METRIC_KEY),
         "best_trial": best_summary,
-        "trials": [
+    }
+
+    if best_summary is not None:
+        summary["best_params"] = best_summary["params"]
+        summary["best_target_args"] = best_summary["target_args"]
+        summary["best_value"] = best_summary["value"]
+        summary["test_accuracy"] = best_summary["test_accuracy"]
+
+    if log_trials:
+        summary["trials"] = [
             {
                 "number": trial.number,
                 "value": trial.value,
@@ -510,8 +594,9 @@ def make_study_summary(study: Any, study_name: str, study_slug: str, config: Map
                 "user_attrs": trial.user_attrs,
             }
             for trial in study.trials
-        ],
-    }
+        ]
+
+    return summary
 
 
 def run_study(args: argparse.Namespace, config: Mapping[str, Any]) -> None:
@@ -536,11 +621,13 @@ def run_study(args: argparse.Namespace, config: Mapping[str, Any]) -> None:
         config["env"] = env
 
     warn_about_noops(config)
-    write_json(results_root / "config.json", config)
+    if args.log_trials:
+        write_json(results_root / "config.json", config)
 
     LOGGER.info("Starting Optuna study '%s'", study_name)
     LOGGER.info("Results root: %s", results_root)
     LOGGER.info("Metric key: %s", config.get("metric_key", DEFAULT_METRIC_KEY))
+    LOGGER.info("Local trial logging: %s", args.log_trials)
 
     study = optuna.create_study(
         study_name=study_name,
@@ -553,21 +640,39 @@ def run_study(args: argparse.Namespace, config: Mapping[str, Any]) -> None:
         ),
     )
     study.optimize(
-        lambda trial: run_training_trial(trial, config, study_slug, results_root),
+        lambda trial: run_training_trial(
+            trial,
+            config,
+            study_slug,
+            results_root,
+            log_trials=args.log_trials,
+        ),
         n_trials=args.n_trials,
         n_jobs=args.n_jobs,
         timeout=args.timeout,
     )
 
-    summary = make_study_summary(study, study_name, study_slug, config)
+    summary = make_study_summary(
+        study,
+        study_name,
+        study_slug,
+        config,
+        log_trials=args.log_trials,
+    )
     write_json(results_root / "best_params.json", summary)
 
     completed = [trial for trial in study.trials if trial.state == TrialState.COMPLETE]
     LOGGER.info("Optimization finished: %s completed trials", len(completed))
-    if summary["best_trial"] is not None:
+    if "best_trial" in summary and summary["best_trial"] is not None:
         LOGGER.info("Best value: %s", summary["best_trial"]["value"])
         LOGGER.info("Best params: %s", summary["best_trial"]["params"])
         LOGGER.info("Best target args: %s", summary["best_trial"]["target_args"])
+        LOGGER.info("Best test_accuracy: %s", summary["best_trial"]["test_accuracy"])
+    elif "best_params" in summary:
+        LOGGER.info("Best value: %s", summary["optimized_metric_value"])
+        LOGGER.info("Best params: %s", summary["best_params"])
+        LOGGER.info("Best target args: %s", summary["best_target_args"])
+        LOGGER.info("Best test_accuracy: %s", summary["test_accuracy"])
     LOGGER.info("Summary saved to: %s", results_root / "best_params.json")
 
 
@@ -580,6 +685,7 @@ def run_dry_run(config: Mapping[str, Any], args: argparse.Namespace) -> None:
         "study_name": study_name,
         "tag": tag,
         "metric_key": config.get("metric_key", DEFAULT_METRIC_KEY),
+        "log_trials": args.log_trials,
         "trial_params": trial_params,
         "target_args": target_args,
         "command": command,
@@ -602,6 +708,20 @@ def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
     parser.add_argument("--print_default_config", action="store_true", help="Print the default JSON config and exit")
     parser.add_argument("--pruner_startup_trials", type=int, default=5, help="MedianPruner startup trials")
     parser.add_argument("--pruner_warmup_steps", type=int, default=5, help="MedianPruner warmup steps")
+    log_group = parser.add_mutually_exclusive_group()
+    log_group.add_argument(
+        "--log_trials",
+        dest="log_trials",
+        action="store_true",
+        default=True,
+        help="Write per-trial command/stdout/stderr/metrics files",
+    )
+    log_group.add_argument(
+        "--no_log_trials",
+        dest="log_trials",
+        action="store_false",
+        help="Only write the final best_params.json summary",
+    )
     return parser.parse_args(argv)
 
 
