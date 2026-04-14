@@ -3,12 +3,12 @@
   "metric_key": "val_accuracy",
   "direction": "maximize",
   "base_args": {
-    "model_name": "roberta-large",
+    "model_name": "meta-llama/Llama-2-7b-hf",
     "lora": true,
-    "task_name": "SST2",
+    "task_name": "WinoGrande",
     "trainer": "zo_sgd",
     "project_name": "zo-rl-optuna",
-    "report_to": "none",
+    "report_to": "wandb",
     "logging_steps": 10,
     "num_train_epochs": 5,
     "per_device_train_batch_size": 16,
@@ -40,7 +40,7 @@
     "k_value": 5,
     "variance": 1.0,
     "use_grad_first": false,
-    "use_wandb": false
+    "use_wandb": true
   },
   "search_space": {
     "learning_rate": {
@@ -55,11 +55,6 @@
       "high": 0.01,
       "log": true,
       "target_arg": "zo_eps"
-    },
-    "k_value": {
-      "type": "int",
-      "low": 1,
-      "high": 20
     }
   }
 }

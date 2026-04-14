@@ -1,4 +1,9 @@
 #!/bin/bash
+export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
+export WANDB_DISABLED="false"
+export WANDB_ENTITY="${WANDB_ENTITY:-andrey}"
+export WANDB_API_KEY="${WANDB_API_KEY:-}"
+export HF_TOKEN="${HF_TOKEN:-}"
 
 set -e
 

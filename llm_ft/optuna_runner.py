@@ -43,7 +43,7 @@ DEFAULT_BASE_ARGS: Dict[str, Any] = {
     "task_name": "SST2",
     "trainer": "zo_rl_jaguar",
     "project_name": "zo-rl-optuna",
-    "report_to": "none",
+    "report_to": "wandb",
     "logging_steps": 10,
     "num_train_epochs": 5,
     "per_device_train_batch_size": 16,
@@ -75,7 +75,7 @@ DEFAULT_BASE_ARGS: Dict[str, Any] = {
     "k_value": 5,
     "variance": 1.0,
     "use_grad_first": False,
-    "use_wandb": False,
+    "use_wandb": True,
 }
 
 
