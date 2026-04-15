@@ -252,6 +252,14 @@ class OurArguments(TrainingArguments):
 
     clean_model_at_end: bool = True  # remove everthing at the end.
 
+    # Early stopping for long Optuna trials
+    early_stopping: bool = False
+    early_stopping_metric: str = "test_acc"
+    early_stopping_mode: str = "maximize"
+    early_stopping_patience: int = 3
+    early_stopping_min_delta: float = 0.0
+    early_stopping_min_steps: int = 1500
+
     # Jaguar-Specific params
 
     zo_tau: float = 1e-6

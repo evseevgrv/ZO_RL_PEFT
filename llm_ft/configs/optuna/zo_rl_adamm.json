@@ -41,7 +41,13 @@
     "k_value": 5,
     "variance": 1.0,
     "use_grad_first": false,
-    "use_wandb": true
+    "use_wandb": true,
+    "early_stopping": true,
+    "early_stopping_metric": "test_acc",
+    "early_stopping_mode": "maximize",
+    "early_stopping_patience": 3,
+    "early_stopping_min_delta": 0.0,
+    "early_stopping_min_steps": 1500
   },
   "search_space": {
     "learning_rate": {

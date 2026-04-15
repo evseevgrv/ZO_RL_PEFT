@@ -262,6 +262,9 @@ class OurTrainer(Trainer):
         self.eval_samples = eval_samples
         self.perturb_module_regex = perturb_module_regex
         self.gradient_sparsity = None # FIXME: is it ok?
+        self._early_stopping_best_metric = None
+        self._early_stopping_bad_evals = 0
+        self._early_stopping_missing_metric_warned = False
 
     def log(self, logs: Dict[str, float]) -> None:
         """Override log method to also log to files"""
@@ -278,6 +281,87 @@ class OurTrainer(Trainer):
         # self.optimizer = ""
         # self.lr_scheduler = get_cosine_schedule_with_warmup(self.optimizer)
         pass
+
+    def _early_stopping_metric_value(self, logs: Dict[str, float]) -> Optional[float]:
+        metric_name = getattr(self.args, "early_stopping_metric", "test_acc")
+        metric_names = [metric_name]
+        aliases = {
+            "test_accuracy": "test_acc",
+            "val_accuracy": "val_acc",
+            "accuracy": "test_acc",
+        }
+        alias = aliases.get(metric_name)
+        if alias is not None and alias not in metric_names:
+            metric_names.append(alias)
+
+        for name in metric_names:
+            if name not in logs:
+                continue
+            try:
+                value = float(logs[name])
+            except (TypeError, ValueError):
+                continue
+            if math.isfinite(value):
+                return value
+        return None
+
+    def _is_early_stopping_improvement(self, current: float) -> bool:
+        if self._early_stopping_best_metric is None:
+            return True
+
+        mode = getattr(self.args, "early_stopping_mode", "maximize").lower()
+        min_delta = float(getattr(self.args, "early_stopping_min_delta", 0.0))
+        if mode == "maximize":
+            return current > self._early_stopping_best_metric + min_delta
+        if mode == "minimize":
+            return current < self._early_stopping_best_metric - min_delta
+        raise ValueError("early_stopping_mode must be either 'maximize' or 'minimize'")
+
+    def _maybe_apply_early_stopping(self, logs: Dict[str, float], step: int) -> Dict[str, float]:
+        if not getattr(self.args, "early_stopping", False):
+            return {}
+
+        current = self._early_stopping_metric_value(logs)
+        metric_name = getattr(self.args, "early_stopping_metric", "test_acc")
+        if current is None:
+            if not self._early_stopping_missing_metric_warned:
+                logger.warning(
+                    "Early stopping is enabled, but metric '%s' was not found in eval logs: %s",
+                    metric_name,
+                    sorted(logs.keys()),
+                )
+                self._early_stopping_missing_metric_warned = True
+            return {}
+
+        if self._is_early_stopping_improvement(current):
+            self._early_stopping_best_metric = current
+            self._early_stopping_bad_evals = 0
+        else:
+            self._early_stopping_bad_evals += 1
+
+        log_key = metric_name.replace("/", "_")
+        early_stopping_logs = {
+            f"early_stopping_best_{log_key}": self._early_stopping_best_metric,
+            "early_stopping_bad_evals": self._early_stopping_bad_evals,
+        }
+
+        patience = max(1, int(getattr(self.args, "early_stopping_patience", 3)))
+        min_steps = max(0, int(getattr(self.args, "early_stopping_min_steps", 1500)))
+        if step >= min_steps and self._early_stopping_bad_evals >= patience:
+            self.control.should_training_stop = True
+            early_stopping_logs.update({
+                "early_stopped": 1,
+                "early_stopping_step": step,
+            })
+            message = (
+                f"Early stopping triggered at step {step}: {metric_name} did not improve "
+                f"for {self._early_stopping_bad_evals} eval checks "
+                f"(best={self._early_stopping_best_metric}, current={current})."
+            )
+            logger.info(message)
+            print(message)
+
+        return early_stopping_logs
 
     def _inner_training_loop(
             self, batch_size=None, args=None, resume_from_checkpoint=None, trial=None, ignore_keys_for_eval=None
@@ -946,36 +1030,42 @@ class OurTrainer(Trainer):
                     break
 
                 if self.args.eval_steps is not None and (total_steps + 1) % self.args.eval_steps == 0:
+                    eval_step = total_steps + 1
                     print(
-                        f"=========================> Evaluating at step {total_steps + 1}... <=========================")
+                        f"=========================> Evaluating at step {eval_step}... <=========================")
                     val_metrics = self.evaluate_func([], self.dev_samples)
                     test_metrics = self.evaluate_func([], self.eval_samples)
                     if "accuracy" in test_metrics:
                         log_dict = {"test_acc": test_metrics["accuracy"], "val_acc": val_metrics["accuracy"]}
+                        log_dict.update(self._maybe_apply_early_stopping(log_dict, eval_step))
                         self.log(log_dict)
                         if hasattr(self.args, 'use_wandb') and self.args.use_wandb:
                             wandb.log(log_dict)
                         if hasattr(self.args, 'log_to_file') and self.args.log_to_file:
                             log_dir = getattr(self.args, 'log_run_dir', None) or getattr(self.args, 'log_dir', None) or "logs"
-                            _log_to_file_if_enabled(log_dict, step=total_steps + 1, log_dir=log_dir)
+                            _log_to_file_if_enabled(log_dict, step=eval_step, log_dir=log_dir)
                         # if clearml_task:
                         #     clearml_task.get_logger().report_scalar(
-                        #         "Accuracy", "test", test_metrics["accuracy"], total_steps + 1)
+                        #         "Accuracy", "test", test_metrics["accuracy"], eval_step)
                         #     clearml_task.get_logger().report_scalar(
-                        #         "Accuracy", "val", val_metrics["accuracy"], total_steps + 1)
+                        #         "Accuracy", "val", val_metrics["accuracy"], eval_step)
                     else:
                         keys = list(test_metrics.keys())
                         log_dict = {}
                         for k in keys:
                             log_dict['test_' + k] = test_metrics[k]
                             log_dict['val_' + k] = val_metrics[k]
+                        log_dict.update(self._maybe_apply_early_stopping(log_dict, eval_step))
                         self.log(log_dict)
                         if hasattr(self.args, 'use_wandb') and self.args.use_wandb:
                             wandb.log(log_dict)
                         # if clearml_task:
                         #     for k, v in log_dict.items():
                         #         clearml_task.get_logger().report_scalar(
-                        #             k.split('_')[0], k, v, total_steps + 1)
+                        #             k.split('_')[0], k, v, eval_step)
+
+                    if self.control.should_training_stop:
+                        break
 
                 max_memory_allocated = 0
                 for device_id in range(torch.cuda.device_count()):

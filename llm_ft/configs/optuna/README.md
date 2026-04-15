@@ -18,8 +18,11 @@ Each config is self-contained: `base_args` explicitly includes fixed launch
 parameters such as `model_name`, `task_name`, dataset sizes, logging settings,
 scheduler settings, `max_steps: 20000`, `num_training_steps: 20000`, and
 `save_strategy: "no"`. Each trial logs to WandB via `use_wandb: true` and
-`report_to: "wandb"`. `tau` is mapped to `zo_eps` because `zo_tau` is currently
-not consumed by the LLM trainer.
+`report_to: "wandb"`. Optuna configs also enable early stopping by default:
+`early_stopping: true` monitors `test_acc` every `eval_steps` and stops a trial
+after `early_stopping_patience` eval checks without improvement once
+`early_stopping_min_steps` has been reached. `tau` is mapped to `zo_eps`
+because `zo_tau` is currently not consumed by the LLM trainer.
 Optuna optimizes `test_accuracy` by default.
 
 Optuna trial tags, which are also used as WandB run names, include the study,
