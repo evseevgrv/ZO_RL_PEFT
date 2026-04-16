@@ -150,7 +150,7 @@ AutoModelForCausalLM.register(MistralConfig, MistralForCausalLM)
 @dataclass
 class OurArguments(TrainingArguments):
     # dataset and sampling strategy
-    task_name: str = "SST2"  # task name should match the string before Dataset in the Dataset class name. We support the following task_name: SST2, RTE, CB, BoolQ, WSC, WIC, MultiRC, Copa, ReCoRD, SQuAD, DROP
+    task_name: str = "SST2"  # task name should match the string before Dataset in the Dataset class name. We support the following task_name: SST2, RTE, CB, BoolQ, WSC, WIC, MultiRC, Copa, ReCoRD, SQuAD, DROP, GSM8K
     project_name: str = "zo-bench"
     # Number of examples
     num_train: int = 0  # ICL mode: number of demonstrations; training mode: number of training samples
@@ -527,6 +527,7 @@ class Framework:
         if self.task.generation:
             # For generation tasks, return the autoregressively-generated text
             output_text = self.forward(encoded_candidates[0], generation=True)
+            output_text = self.task.postprocess_generation(output_text)
             # if verbose:
             #     logger.info("=== Prompt ===")
             #     logger.info(self.tokenizer.decode(encoded_candidates[0]))

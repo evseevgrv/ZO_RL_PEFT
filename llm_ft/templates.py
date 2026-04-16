@@ -474,6 +474,24 @@ class DROPTemplate(Template):
         raise NotImplementedError
 
 
+class GSM8KTemplate(Template):
+
+    def encode(self, sample):
+        question = sample.data["question"].strip()
+        return f"Question: {question}\nAnswer:"
+
+    def verbalize(self, sample, candidate):
+        question = sample.data["question"].strip()
+        answer = sample.data["answer"].strip()
+        return f"Question: {question}\nAnswer: {answer}\n"
+
+    def encode_sfc(self, sample):
+        raise NotImplementedError
+
+    def verbalize_sfc(self, sample, candidate):
+        raise NotImplementedError
+
+
 class WinoGrandeTemplate(Template):
     @staticmethod
     def get_prompt(sample):

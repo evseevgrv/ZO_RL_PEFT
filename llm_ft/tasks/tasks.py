@@ -1,4 +1,5 @@
 import logging
+import re
 import sys
 from dataclasses import dataclass
 from typing import List, Union
@@ -54,6 +55,9 @@ class Dataset:
 
     def build_sample(self, example):
         return
+
+    def postprocess_generation(self, text):
+        return text
 
     def sample_train_sets(self, num_train=32, num_dev=None, num_eval=None, num_train_sets=None, seed=None):
         if seed is not None:
@@ -423,6 +427,80 @@ class DROPDataset(Dataset):
 
     def get_template(self, template_version=0):
         return {0: DROPTemplate}[template_version]()
+
+
+class GSM8KDataset(Dataset):
+    generation = True
+
+    _number_pattern = re.compile(r"[-+]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?")
+
+    def __init__(self, subtask=None, **kwargs) -> None:
+        self.load_dataset()
+
+    def load_dataset(self):
+        dataset = load_dataset("gsm8k", "main")
+        train_examples = dataset["train"]
+        valid_examples = dataset["test"]
+
+        train_samples = [self.build_sample(example, idx) for idx, example in enumerate(train_examples)]
+        valid_samples = [self.build_sample(example, idx) for idx, example in enumerate(valid_examples)]
+        self.samples = {"train": train_samples, "valid": valid_samples}
+
+    @classmethod
+    def _normalize_number(cls, number):
+        number = number.replace(",", "").strip()
+        if number.startswith("+"):
+            number = number[1:]
+
+        sign = ""
+        if number.startswith("-"):
+            sign = "-"
+            number = number[1:]
+
+        if "." in number:
+            whole, fraction = number.split(".", 1)
+            whole = whole.lstrip("0") or "0"
+            fraction = fraction.rstrip("0")
+            if fraction:
+                normalized = f"{whole}.{fraction}"
+            else:
+                normalized = whole
+        else:
+            normalized = number.lstrip("0") or "0"
+
+        if normalized == "0":
+            return "0"
+        return sign + normalized
+
+    @classmethod
+    def extract_final_answer(cls, text):
+        text = str(text).strip()
+        if "####" in text:
+            text = text.rsplit("####", 1)[-1].strip()
+
+        matches = cls._number_pattern.findall(text)
+        if not matches:
+            return text
+        return cls._normalize_number(matches[-1])
+
+    def build_sample(self, example, idx):
+        final_answer = self.extract_final_answer(example["answer"])
+        return Sample(
+            id=idx,
+            data={
+                "question": example["question"],
+                "answer": example["answer"],
+                "final_answer": final_answer,
+            },
+            candidates=None,
+            correct_candidate=final_answer,
+        )
+
+    def postprocess_generation(self, text):
+        return self.extract_final_answer(text)
+
+    def get_template(self, template_version=0):
+        return {0: GSM8KTemplate}[template_version]()
 
 
 class WinoGrandeDataset(Dataset):
