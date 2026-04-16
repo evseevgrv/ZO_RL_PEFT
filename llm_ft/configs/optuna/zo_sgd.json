@@ -5,7 +5,7 @@
   "base_args": {
     "model_name": "meta-llama/Llama-2-7b-hf",
     "lora": true,
-    "task_name": "WinoGrande",
+    "task_name": "GSM8K",
     "trainer": "zo_sgd",
     "project_name": "zo-rl-optuna",
     "report_to": "wandb",
