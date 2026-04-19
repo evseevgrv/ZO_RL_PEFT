@@ -22,7 +22,7 @@
     "num_eval": 1000,
     "num_train": 5000,
     "num_dev": 500,
-    "train_as_classification": true,
+    "train_as_classification": false,
     "train_set_seed": 0,
     "perturbation_mode": "two_side",
     "momentum": 0.0,

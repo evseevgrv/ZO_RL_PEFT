@@ -822,6 +822,11 @@ def main():
 
     set_seed(args.seed)
     task = get_task(args.task_name)
+    if task.generation and args.train_as_classification:
+        raise ValueError(
+            f"Task {args.task_name} is generative and has no classification candidates; "
+            "disable --train_as_classification or choose a classification task."
+        )
 
     # This function samples both training and validation samples. The validation (dev) samples are also stored in "train_sets"
     # Later the train_samples and dev_samples are separated
