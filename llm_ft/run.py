@@ -150,7 +150,7 @@ AutoModelForCausalLM.register(MistralConfig, MistralForCausalLM)
 @dataclass
 class OurArguments(TrainingArguments):
     # dataset and sampling strategy
-    task_name: str = "SST2"  # task name should match the string before Dataset in the Dataset class name. We support the following task_name: SST2, RTE, CB, BoolQ, WSC, WIC, MultiRC, Copa, ReCoRD, SQuAD, DROP, GSM8K
+    task_name: str = "SST2"  # task name should match the string before Dataset in the Dataset class name. We support the following task_name: SST2, RTE, CB, BoolQ, WSC, WIC, MultiRC, Copa, ReCoRD, SQuAD, DROP, GSM8K, ARC. For AI2 ARC subsets use ARC__ARC-Challenge or ARC__ARC-Easy.
     project_name: str = "zo-bench"
     # Number of examples
     num_train: int = 0  # ICL mode: number of demonstrations; training mode: number of training samples

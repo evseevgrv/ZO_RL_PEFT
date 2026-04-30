@@ -503,6 +503,99 @@ class GSM8KDataset(Dataset):
         return {0: GSM8KTemplate}[template_version]()
 
 
+class ARCDataset(Dataset):
+    default_subset = "ARC-Challenge"
+    subset_aliases = {
+        None: "ARC-Challenge",
+        "ARC-Challenge": "ARC-Challenge",
+        "arc-challenge": "ARC-Challenge",
+        "ARCChallenge": "ARC-Challenge",
+        "ARC_C": "ARC-Challenge",
+        "ARC-C": "ARC-Challenge",
+        "challenge": "ARC-Challenge",
+        "Challenge": "ARC-Challenge",
+        "ARC-Easy": "ARC-Easy",
+        "arc-easy": "ARC-Easy",
+        "ARCEasy": "ARC-Easy",
+        "ARC_E": "ARC-Easy",
+        "easy": "ARC-Easy",
+        "Easy": "ARC-Easy",
+    }
+
+    def __init__(self, subtask=None, **kwargs) -> None:
+        self.load_dataset(subtask, **kwargs)
+
+    @classmethod
+    def normalize_subset(cls, subset):
+        if subset in cls.subset_aliases:
+            return cls.subset_aliases[subset]
+        raise ValueError(
+            f"Unsupported ARC subset '{subset}'. Use 'ARC-Challenge' or 'ARC-Easy'."
+        )
+
+    @staticmethod
+    def normalize_choice_label(label):
+        return str(label).strip()
+
+    @classmethod
+    def resolve_answer_label(cls, answer_key, labels):
+        labels = [cls.normalize_choice_label(label) for label in labels]
+        answer_key = cls.normalize_choice_label(answer_key)
+
+        if answer_key in labels:
+            return answer_key
+
+        upper_to_label = {label.upper(): label for label in labels}
+        if answer_key.upper() in upper_to_label:
+            return upper_to_label[answer_key.upper()]
+
+        if answer_key.isdigit():
+            index = int(answer_key) - 1
+            if 0 <= index < len(labels):
+                return labels[index]
+
+        if len(answer_key) == 1 and answer_key.isalpha():
+            index = ord(answer_key.upper()) - ord("A")
+            if 0 <= index < len(labels):
+                return labels[index]
+
+        raise ValueError(f"Could not resolve ARC answer key '{answer_key}' from labels {labels}")
+
+    def load_dataset(self, path, **kwargs):
+        subset = self.normalize_subset(path)
+        dataset = load_dataset("allenai/ai2_arc", subset)
+        train_examples = dataset["train"]
+        valid_examples = dataset["validation"]
+
+        train_samples = [self.build_sample(example) for example in train_examples]
+        valid_samples = [self.build_sample(example) for example in valid_examples]
+        self.samples = {"train": train_samples, "valid": valid_samples}
+        self.subtask = subset
+
+    def build_sample(self, example):
+        labels = [self.normalize_choice_label(label) for label in example["choices"]["label"]]
+        texts = [str(text).strip() for text in example["choices"]["text"]]
+        correct_label = self.resolve_answer_label(example["answerKey"], labels)
+
+        return Sample(
+            id=example.get("id"),
+            data={
+                "id": example.get("id"),
+                "question": example["question"],
+                "choices": {
+                    "label": labels,
+                    "text": texts,
+                },
+                "answerKey": correct_label,
+            },
+            candidates=labels,
+            correct_candidate=correct_label,
+        )
+
+    def get_template(self, template_version=0):
+        return {0: ARCTemplate}[template_version]()
+
+
 class WinoGrandeDataset(Dataset):
     def __init__(self, subtask=None, **kwargs) -> None:
         super().__init__(subtask, **kwargs)

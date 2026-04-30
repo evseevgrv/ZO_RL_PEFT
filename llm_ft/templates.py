@@ -492,6 +492,33 @@ class GSM8KTemplate(Template):
         raise NotImplementedError
 
 
+class ARCTemplate(Template):
+    @staticmethod
+    def format_choices(sample):
+        return "\n".join(
+            f"{label}. {text}"
+            for label, text in zip(
+                sample.data["choices"]["label"],
+                sample.data["choices"]["text"],
+            )
+        )
+
+    def encode(self, sample):
+        question = sample.data["question"].strip()
+        choices = self.format_choices(sample)
+        return f"Question: {question}\nChoices:\n{choices}\nAnswer:"
+
+    def verbalize(self, sample, candidate):
+        return f"{self.encode(sample)} {candidate}"
+
+    def encode_sfc(self, sample):
+        choices = self.format_choices(sample)
+        return f"Choices:\n{choices}\nAnswer:"
+
+    def verbalize_sfc(self, sample, candidate):
+        return f"{self.encode_sfc(sample)} {candidate}"
+
+
 class WinoGrandeTemplate(Template):
     @staticmethod
     def get_prompt(sample):
