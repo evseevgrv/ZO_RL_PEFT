@@ -1,17 +1,54 @@
 import logging
+import os
 import re
 import sys
+import tempfile
 from dataclasses import dataclass
+from pathlib import Path
 from typing import List, Union
 
 import numpy as np
-from datasets import load_dataset
+from datasets import load_dataset as hf_load_dataset
 
 from templates import *
 from utils import temp_seed
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
+_HF_DATASET_CACHE_RETRY_MESSAGES = (
+    "must be called with a dataclass type or instance",
+    "Feature type 'List' not found",
+    "Feature type 'LargeList' not found",
+)
+
+
+def _fallback_hf_cache_dir():
+    configured_cache_dir = os.environ.get("ZO_RL_PEFT_HF_DATASETS_CACHE")
+    if configured_cache_dir:
+        return configured_cache_dir
+    return str(Path(tempfile.gettempdir()) / "zo_rl_peft_hf_datasets_cache")
+
+
+def load_dataset(*args, **kwargs):
+    try:
+        return hf_load_dataset(*args, **kwargs)
+    except (TypeError, ValueError) as exc:
+        if not any(message in str(exc) for message in _HF_DATASET_CACHE_RETRY_MESSAGES):
+            raise
+        if kwargs.get("cache_dir") or kwargs.get("download_mode") == "force_redownload":
+            raise
+
+        retry_kwargs = dict(kwargs)
+        retry_kwargs["cache_dir"] = _fallback_hf_cache_dir()
+        retry_kwargs["download_mode"] = "force_redownload"
+        logger.warning(
+            "Retrying dataset load with a fresh Hugging Face cache at %s after a cache/schema "
+            "compatibility error: %s",
+            retry_kwargs["cache_dir"],
+            exc,
+        )
+        return hf_load_dataset(*args, **retry_kwargs)
 
 
 def get_task(task_name):

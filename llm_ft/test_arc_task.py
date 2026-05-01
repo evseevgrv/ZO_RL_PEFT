@@ -117,6 +117,28 @@ def test_arc_answer_key_resolution_supports_numeric_and_letter_aliases():
     assert ARCDataset.resolve_answer_label("D", ["1", "2", "3", "4"]) == "4"
 
 
+def test_load_dataset_retries_with_fresh_cache_on_incompatible_metadata(monkeypatch):
+    calls = []
+
+    def fake_hf_load_dataset(name, config, **kwargs):
+        calls.append((name, config, kwargs))
+        if len(calls) == 1:
+            raise TypeError("must be called with a dataclass type or instance")
+        return {"train": [], "validation": []}
+
+    monkeypatch.setattr(task_module, "hf_load_dataset", fake_hf_load_dataset)
+
+    task = get_task("ARC")
+
+    assert task.samples == {"train": [], "valid": []}
+    assert len(calls) == 2
+    assert calls[0] == ("allenai/ai2_arc", "ARC-Challenge", {})
+    assert calls[1][0] == "allenai/ai2_arc"
+    assert calls[1][1] == "ARC-Challenge"
+    assert calls[1][2]["download_mode"] == "force_redownload"
+    assert "cache_dir" in calls[1][2]
+
+
 def test_arc_template_formats_question_choices_and_answer_label():
     sample = Sample(
         data={
