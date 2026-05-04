@@ -22,6 +22,8 @@ class ZO_RL_SGD(ZeroOrderOptimizer):
             lr_mu: Optional[float] = None,
             use_grad_first: bool = False,
             evaluate_memory: bool = False,
+            candidate_selection_strategy: str = "best",
+            candidate_average_count: int = 3,
     ):
         super().__init__(
             params,
@@ -38,6 +40,12 @@ class ZO_RL_SGD(ZeroOrderOptimizer):
         self.lr_mu = lr_mu if lr_mu is not None else lr
         self.use_grad_first = use_grad_first
         self.evaluate_memory = evaluate_memory
+        self.candidate_selection_strategy = candidate_selection_strategy
+        self.candidate_average_count = max(1, candidate_average_count)
+        if self.candidate_selection_strategy not in {"best", "random", "mean"}:
+            raise ValueError(
+                "candidate_selection_strategy must be one of: best, random, mean"
+            )
         
         for group in self.param_groups:
             for param in group['params']:
@@ -70,8 +78,8 @@ class ZO_RL_SGD(ZeroOrderOptimizer):
         if self.variance <= 0:
             raise ValueError("ZO_RL_SGD requires variance > 0")
 
-        loss1, loss2 = None, None 
-        loss_values = {}
+        candidate_seeds = []
+        candidate_losses = []
 
         if not self.evaluate_memory:
             for group in self.param_groups:
@@ -82,30 +90,44 @@ class ZO_RL_SGD(ZeroOrderOptimizer):
 
         for _ in range(self.k):
             self.zo_random_seed = np.random.randint(1_000_000_000)
+            candidate_seeds.append(self.zo_random_seed)
             self.generator.manual_seed(self.zo_random_seed)
             self._mu_pertrub(scaling_factor=1)
             loss = closure()
-            loss_values[self.zo_random_seed] = self._loss_to_float(loss)
+            candidate_losses.append(self._loss_to_float(loss))
             self.generator.manual_seed(self.zo_random_seed)
             self._mu_pertrub(scaling_factor=-1)
-        
-        optimal_seed = min(loss_values, key=loss_values.get)
-        self.zo_random_seed = optimal_seed
-        
-        # self.zo_random_seed = np.random.randint(1_000_000_000)
 
-        self.generator.manual_seed(self.zo_random_seed)
-        self._mu_pertrub(scaling_factor=1)
-        loss1 = closure()
+        selected_indices = self._select_candidate_indices(candidate_losses)
+        selected_seeds = [candidate_seeds[idx] for idx in selected_indices]
+        self.selected_zo_random_seeds = selected_seeds
+        self.zo_random_seed = selected_seeds[0]
 
-        self.generator.manual_seed(self.zo_random_seed)
-        self._mu_pertrub(scaling_factor=-2)
-        loss2 = closure()
-        
-        self.projected_grad = (self._loss_to_float(loss1) - self._loss_to_float(loss2)) / 2.0
+        selected_projected_grads = []
+        selected_loss_plus_values = []
+        selected_loss_refs = []
 
-        seeds = list(loss_values.keys())
-        f_tensor = torch.tensor(list(loss_values.values()), dtype=torch.float32)
+        for seed in selected_seeds:
+            self.generator.manual_seed(seed)
+            self._mu_pertrub(scaling_factor=1)
+            loss1 = closure()
+            loss1_value = self._loss_to_float(loss1)
+
+            self.generator.manual_seed(seed)
+            self._mu_pertrub(scaling_factor=-2)
+            loss2 = closure()
+            loss2_value = self._loss_to_float(loss2)
+
+            selected_projected_grads.append((loss1_value - loss2_value) / 2.0)
+            selected_loss_plus_values.append(loss1_value)
+            selected_loss_refs.append(loss1)
+
+            self.generator.manual_seed(seed)
+            self._mu_pertrub(scaling_factor=1)
+
+        self.projected_grad = sum(selected_projected_grads) / len(selected_projected_grads)
+
+        f_tensor = torch.tensor(candidate_losses, dtype=torch.float32)
         f_sum = torch.sum(f_tensor)
         # Handle k=1 case to avoid division by zero
         if self.k > 1:
@@ -113,13 +135,7 @@ class ZO_RL_SGD(ZeroOrderOptimizer):
         else:
             coeff = torch.zeros_like(f_tensor)  # When k=1, mu update term is zero
 
-
-        # Restore parameters to original state (undo perturbations)
-        self.generator.manual_seed(self.zo_random_seed)
-        self._mu_pertrub(scaling_factor=1)
-
-        self.generator.manual_seed(self.zo_random_seed)
-        for group_idx, group in enumerate(self.param_groups):
+        for group in self.param_groups:
             lr = group['lr']
             eps = group['eps']
             momentum = group['momentum']
@@ -129,8 +145,11 @@ class ZO_RL_SGD(ZeroOrderOptimizer):
                 state = self.state[param]
                 state['step'] += 1
 
-                z = self._sample_mu_direction(param)
-                grad = (z * self.projected_grad) / eps
+                grad = torch.zeros_like(param, memory_format=torch.preserve_format)
+                for projected_grad, seed in zip(selected_projected_grads, selected_seeds):
+                    self.generator.manual_seed(seed)
+                    z = self._sample_mu_direction(param)
+                    grad.add_(z, alpha=projected_grad / (eps * len(selected_seeds)))
                 if weight_decay is not None and weight_decay != 0:
                     grad = grad.add(param.data, alpha=weight_decay)
                 if momentum is not None and momentum != 0:
@@ -150,7 +169,7 @@ class ZO_RL_SGD(ZeroOrderOptimizer):
                 state = self.state[p]
                 mu_diffs[p] = torch.zeros_like(state['mu'])
 
-        for coeff_value, seed in zip(coeff.tolist(), seeds):
+        for coeff_value, seed in zip(coeff.tolist(), candidate_seeds):
             self.generator.manual_seed(seed)
             for group in self.param_groups:
                 for p in group['params']:
@@ -221,13 +240,38 @@ class ZO_RL_SGD(ZeroOrderOptimizer):
             except (ImportError, AttributeError):
                 pass       
 
-        return loss1
+        return self._average_selected_losses(selected_loss_refs, selected_loss_plus_values)
 
     @staticmethod
     def _loss_to_float(loss) -> float:
         if torch.is_tensor(loss):
             return loss.detach().float().item()
         return float(loss)
+
+    def _select_candidate_indices(self, candidate_losses):
+        if not candidate_losses:
+            raise ValueError("candidate_losses must not be empty")
+
+        if self.candidate_selection_strategy == "best":
+            return [min(range(len(candidate_losses)), key=candidate_losses.__getitem__)]
+
+        if self.candidate_selection_strategy == "random":
+            random_idx = int(np.random.randint(len(candidate_losses)))
+            return [random_idx]
+
+        selected_count = min(self.candidate_average_count, len(candidate_losses))
+        ranked_indices = sorted(
+            range(len(candidate_losses)),
+            key=candidate_losses.__getitem__,
+        )
+        return ranked_indices[:selected_count]
+
+    def _average_selected_losses(self, losses, loss_values):
+        average_loss = sum(loss_values) / len(loss_values)
+        first_loss = losses[0]
+        if torch.is_tensor(first_loss):
+            return first_loss.detach().new_tensor(average_loss)
+        return average_loss
 
     def _sample_mu_direction(self, param):
         state = self.state[param]

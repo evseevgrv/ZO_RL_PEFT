@@ -67,6 +67,15 @@ def _dense_probe_average(theta, eps, seeds):
     return torch.stack(losses).mean(), torch.stack(grads).mean(dim=0)
 
 
+def _dense_probe_single(theta, eps, seed):
+    z = _sample_dense_direction(theta.shape, seed)
+    loss_plus = (theta + eps * z).square().sum()
+    loss_minus = (theta - eps * z).square().sum()
+    projected_grad = (loss_plus - loss_minus) / 2
+    grad = z * projected_grad / eps
+    return loss_plus, grad
+
+
 def _sparse_indices(length, seed):
     generator = torch.Generator(device="cpu")
     generator.manual_seed(seed)
@@ -396,6 +405,77 @@ def test_zo_rl_sgd_replays_candidate_vectors_for_mu_update(monkeypatch):
 
         assert torch.allclose(sample_calls[param_offset], sample_calls[16 + param_offset])
         assert torch.allclose(sample_calls[4 + param_offset], sample_calls[18 + param_offset])
+
+
+def test_zo_rl_sgd_random_candidate_selection_uses_random_seed(monkeypatch):
+    theta0 = torch.tensor([0.35, -0.25, 0.45], dtype=torch.float32)
+    seeds = [11, 29]
+    probe_results = [_dense_probe_single(theta0, 1e-3, seed) for seed in seeds]
+    best_idx = min(range(len(seeds)), key=lambda idx: probe_results[idx][0].item())
+    random_idx = 1 - best_idx
+    expected_loss, expected_grad = probe_results[random_idx]
+
+    _patch_randint(monkeypatch, [*seeds, random_idx])
+
+    param = torch.nn.Parameter(theta0.clone())
+    optimizer = ZO_RL_SGD(
+        [param],
+        lr=0.05,
+        eps=1e-3,
+        momentum=0.0,
+        variance=1.0,
+        lr_mu=0.0,
+        k=2,
+        candidate_selection_strategy="random",
+    )
+    closure, calls = _make_quadratic_closure(param)
+
+    returned_loss = optimizer.step(closure)
+    expected_param = theta0 - 0.05 * expected_grad
+
+    assert calls["count"] == 4
+    assert optimizer.zo_random_seed == seeds[random_idx]
+    assert optimizer.zo_random_seed != seeds[best_idx]
+    assert torch.allclose(returned_loss, expected_loss)
+    assert torch.allclose(param.detach(), expected_param, atol=1e-6, rtol=1e-6)
+
+
+def test_zo_rl_sgd_mean_selection_averages_top_three_gradients(monkeypatch):
+    theta0 = torch.tensor([0.25, -0.15, 0.4], dtype=torch.float32)
+    seeds = [11, 29, 47, 53]
+    probe_results = [_dense_probe_single(theta0, 1e-3, seed) for seed in seeds]
+    ranked_indices = sorted(
+        range(len(seeds)),
+        key=lambda idx: probe_results[idx][0].item(),
+    )
+    selected_indices = ranked_indices[:3]
+    expected_loss = torch.stack([probe_results[idx][0] for idx in selected_indices]).mean()
+    expected_grad = torch.stack([probe_results[idx][1] for idx in selected_indices]).mean(dim=0)
+    expected_seeds = [seeds[idx] for idx in selected_indices]
+
+    _patch_randint(monkeypatch, seeds)
+
+    param = torch.nn.Parameter(theta0.clone())
+    optimizer = ZO_RL_SGD(
+        [param],
+        lr=0.05,
+        eps=1e-3,
+        momentum=0.0,
+        variance=1.0,
+        lr_mu=0.0,
+        k=4,
+        candidate_selection_strategy="mean",
+        candidate_average_count=3,
+    )
+    closure, calls = _make_quadratic_closure(param)
+
+    returned_loss = optimizer.step(closure)
+    expected_param = theta0 - 0.05 * expected_grad
+
+    assert calls["count"] == 10
+    assert optimizer.selected_zo_random_seeds == expected_seeds
+    assert torch.allclose(returned_loss, expected_loss)
+    assert torch.allclose(param.detach(), expected_param, atol=1e-6, rtol=1e-6)
 
 
 def test_zo_rl_adamm_replays_candidate_vectors_for_mu_update(monkeypatch):

@@ -304,6 +304,8 @@ class OurArguments(TrainingArguments):
     lr_mu: float = None 
     use_grad_first: bool = False
     evaluate_memory: bool = False
+    zo_rl_sgd_candidate_selection_strategy: str = "best"
+    zo_rl_sgd_candidate_average_count: int = 3
     adamu_sigma: float = 1e-8
     adamu_t1: Optional[int] = None
     adamu_t2: Optional[int] = None
