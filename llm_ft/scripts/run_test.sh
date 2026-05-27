@@ -45,15 +45,15 @@ for lr in "${learning_rates[@]}"; do
 
     # Dataset Settings
     command+=" --num_eval=1000"
-    command+=" --num_train=1000000"
-    # command+=" --num_dev=100"
-    # command+=" --train_as_classification"
+    command+=" --num_train=1000"
+    command+=" --num_dev=500"
+    command+=" --train_as_classification"
     command+=" --train_set_seed=0"
 
     # Training Hyperparameters
     command+=" --perturbation_mode=\"two_side\""
     command+=" --zo_eps=1e-3"
-    command+=" --momentum=0.9"
+    command+=" --momentum=0.0"
     command+=" --weight_decay=0.0"
     command+=" --module_wise_perturbation=False"
 
