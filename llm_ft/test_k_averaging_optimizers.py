@@ -237,9 +237,9 @@ def test_jaguar_signsgd_matches_sparse_probe_average(monkeypatch, k, seeds):
     )
 
 
-@pytest.mark.parametrize("k,seeds", [(1, [19]), (2, [19, 37])])
-def test_sparse_jaguar_signsgd_matches_manual_probe_average(monkeypatch, k, seeds):
-    _patch_randint(monkeypatch, [101, *seeds])
+def test_sparse_jaguar_signsgd_matches_manual_probe(monkeypatch):
+    seed = 19
+    _patch_randint(monkeypatch, [seed])
 
     theta0 = torch.tensor([0.25, -0.5, 0.75], dtype=torch.float32)
     initial_grad_accum = torch.tensor([0.4, -0.6, 0.8], dtype=torch.float32)
@@ -251,7 +251,6 @@ def test_sparse_jaguar_signsgd_matches_manual_probe_average(monkeypatch, k, seed
         eps=1e-3,
         beta=0.9,
         params_ratio=1.0,
-        k=k,
     )
     optimizer.state[param]["step"] = 0
     optimizer.state[param]["grad_accum"] = initial_grad_accum.clone()
@@ -259,11 +258,11 @@ def test_sparse_jaguar_signsgd_matches_manual_probe_average(monkeypatch, k, seed
     closure, calls = _make_quadratic_closure(param)
     returned_loss = optimizer.step(closure)
 
-    expected_loss, expected_grad = _dense_probe_average(theta0, 1e-3, seeds)
+    expected_loss, expected_grad = _dense_probe_average(theta0, 1e-3, [seed])
     expected_grad_accum = 0.9 * initial_grad_accum + 0.1 * expected_grad
     expected_param = theta0 - 0.05 * torch.sign(expected_grad_accum)
 
-    assert calls["count"] == 2 * k
+    assert calls["count"] == 2
     assert torch.allclose(returned_loss, expected_loss)
     assert torch.allclose(optimizer.state[param]["grad_accum"], expected_grad_accum, atol=1e-6, rtol=1e-6)
     assert torch.allclose(param.detach(), expected_param, atol=1e-6, rtol=1e-6)
@@ -527,7 +526,7 @@ def test_zo_rl_adamm_replays_candidate_vectors_for_mu_update(monkeypatch):
 
 
 def test_sparse_jaguar_signsgd_reuses_probe_vectors_for_update(monkeypatch):
-    _patch_randint(monkeypatch, [101, 202])
+    _patch_randint(monkeypatch, [202])
 
     param_a = torch.nn.Parameter(torch.tensor([0.2, -0.4], dtype=torch.float32))
     param_b = torch.nn.Parameter(torch.tensor([0.7, -0.1], dtype=torch.float32))
@@ -537,7 +536,6 @@ def test_sparse_jaguar_signsgd_reuses_probe_vectors_for_update(monkeypatch):
         eps=1e-3,
         beta=0.9,
         params_ratio=1.0,
-        k=1,
     )
 
     sample_calls = []
@@ -563,8 +561,8 @@ def test_sparse_jaguar_signsgd_reuses_probe_vectors_for_update(monkeypatch):
         assert torch.allclose(sample_calls[param_offset], sample_calls[param_offset + 6])
 
 
-def test_sparse_jaguar_signsgd_reuses_selected_params_across_k(monkeypatch):
-    _patch_randint(monkeypatch, [101, 11, 29, 47])
+def test_sparse_jaguar_signsgd_updates_selected_subset(monkeypatch):
+    _patch_randint(monkeypatch, [101])
 
     param_a0 = torch.tensor([0.2, -0.4], dtype=torch.float32)
     param_b0 = torch.tensor([0.7, -0.1], dtype=torch.float32)
@@ -576,16 +574,12 @@ def test_sparse_jaguar_signsgd_reuses_selected_params_across_k(monkeypatch):
         eps=1e-3,
         beta=0.9,
         params_ratio=0.5,
-        k=3,
     )
 
-    selected_calls = {"count": 0}
+    def fixed_randperm(n, device=None, generator=None):
+        return torch.arange(n, device=device)
 
-    def fixed_selected_param_ids(params_ratio=0.1):
-        selected_calls["count"] += 1
-        return {id(param_a)}
-
-    monkeypatch.setattr(optimizer, "_sample_selected_param_ids", fixed_selected_param_ids)
+    monkeypatch.setattr(torch, "randperm", fixed_randperm)
 
     closure_calls = {"count": 0}
 
@@ -595,8 +589,7 @@ def test_sparse_jaguar_signsgd_reuses_selected_params_across_k(monkeypatch):
 
     optimizer.step(closure)
 
-    assert selected_calls["count"] == 1
-    assert closure_calls["count"] == 6
+    assert closure_calls["count"] == 2
     assert not torch.allclose(param_a.detach(), param_a0)
     assert torch.allclose(param_b.detach(), param_b0)
 

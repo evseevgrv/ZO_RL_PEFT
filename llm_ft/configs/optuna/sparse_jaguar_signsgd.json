@@ -38,7 +38,6 @@
     "tensor_sampling_type": "standard_normal",
     "matrix_sampling_type": "Random_baseline",
     "params_ratio": 0.1,
-    "k_value": 5,
     "variance": 1.0,
     "use_grad_first": false,
     "use_wandb": true,
@@ -68,11 +67,6 @@
       "low": 0.0,
       "high": 0.999,
       "target_arg": "zo_beta"
-    },
-    "k_value": {
-      "type": "int",
-      "low": 1,
-      "high": 20
     },
     "params_ratio": {
       "type": "float",
