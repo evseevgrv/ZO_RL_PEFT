@@ -210,3 +210,7 @@ __marimo__/
 /**/result/
 /**/mlruns/
 **/plots 
+
+# runtime artifacts (relocated to ../ZO_RL_PEFT_artifacts)
+llm_ft/offload/
+llm_ft/logs/
