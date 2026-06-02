@@ -5,10 +5,61 @@ job:
   generate_name: zopeft
   description: ""
   image: pytorch/pytorch:2.1.0-cuda12.1-cudnn8-devel
+  # Upload only the code needed to run the job. Do NOT upload runtime
+  # artifacts: llm_ft/offload (~768M weight shards) and llm_ft/logs (~74M)
+  # blow past the gRPC 5MB message limit when bundled via `src: ./`.
   input:
+  # repo root: pip install reads /workdir/requirements.txt
   - type: files
-    src: ./
-    dst: /workdir
+    src: ./requirements.txt
+    dst: /workdir/requirements.txt
+  # llm_ft code directories
+  - type: files
+    src: ./llm_ft/configs
+    dst: /workdir/llm_ft/configs
+  - type: files
+    src: ./llm_ft/models
+    dst: /workdir/llm_ft/models
+  - type: files
+    src: ./llm_ft/tasks
+    dst: /workdir/llm_ft/tasks
+  - type: files
+    src: ./llm_ft/optimizers
+    dst: /workdir/llm_ft/optimizers
+  - type: files
+    src: ./llm_ft/gradient_pruning
+    dst: /workdir/llm_ft/gradient_pruning
+  - type: files
+    src: ./llm_ft/scripts
+    dst: /workdir/llm_ft/scripts
+  # llm_ft loose source files
+  - type: files
+    src: ./llm_ft/run.py
+    dst: /workdir/llm_ft/run.py
+  - type: files
+    src: ./llm_ft/trainer.py
+    dst: /workdir/llm_ft/trainer.py
+  - type: files
+    src: ./llm_ft/training_utils.py
+    dst: /workdir/llm_ft/training_utils.py
+  - type: files
+    src: ./llm_ft/utils.py
+    dst: /workdir/llm_ft/utils.py
+  - type: files
+    src: ./llm_ft/k_utils.py
+    dst: /workdir/llm_ft/k_utils.py
+  - type: files
+    src: ./llm_ft/metrics.py
+    dst: /workdir/llm_ft/metrics.py
+  - type: files
+    src: ./llm_ft/lora.py
+    dst: /workdir/llm_ft/lora.py
+  - type: files
+    src: ./llm_ft/templates.py
+    dst: /workdir/llm_ft/templates.py
+  - type: files
+    src: ./llm_ft/requirements.txt
+    dst: /workdir/llm_ft/requirements.txt
   args:
     - bash
     - -c

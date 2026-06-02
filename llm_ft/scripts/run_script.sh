@@ -9,7 +9,7 @@ export WANDB_API_KEY=""
 export HF_TOKEN=""
 
 learning_rates=(
-    1e-6
+    1e-5
 )
 
 for lr in "${learning_rates[@]}"; do
@@ -19,10 +19,10 @@ for lr in "${learning_rates[@]}"; do
     command="python run.py"
 
     # Model and Task Configuration
-    command+=" --model_name=\"roberta-large\""
-    # command+=" --lora"
+    command+=" --model_name=\"facebook/opt-1.3b\""
+    command+=" --lora"
     command+=" --task_name=\"SST2\""
-    command+=" --trainer=\"hizoo\""
+    command+=" --trainer=\"sparse_jaguar_signsgd\""
 
     # Logging and Reporting
     command+=" --output_dir=\"result/SST2-FT-${TAG}\""
@@ -34,13 +34,13 @@ for lr in "${learning_rates[@]}"; do
     # Training Configuration
     command+=" --num_train_epochs=5"
     command+=" --per_device_train_batch_size=16"
-    command+=" --load_best_model_at_end"
+    # command+=" --load_best_model_at_end"
     command+=" --evaluation_strategy=\"steps\""
-    command+=" --save_strategy=\"steps\""
-    command+=" --save_total_limit=1"
+    command+=" --save_strategy=\"no\""
+    # command+=" --save_total_limit=1"
     command+=" --eval_steps=500"
     command+=" --max_steps=20000"
-    command+=" --save_steps=1000"
+    # command+=" --save_steps=1000"
 
     command+=" --max_length 512"
 
