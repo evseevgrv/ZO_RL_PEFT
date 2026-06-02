@@ -1,0 +1,23 @@
+job:
+  time_limit: 168h
+  flavor: h100-1x
+  region: cloud-ru
+  generate_name: zopeft
+  description: ""
+  image: pytorch/pytorch:2.1.0-cuda12.1-cudnn8-devel
+  input:
+  - type: files
+    src: ./
+    dst: /workdir
+  args:
+    - bash
+    - -c
+    - |
+      apt-get update && \
+      apt-get install -y --no-install-recommends git build-essential && \
+      rm -rf /var/lib/apt/lists/* && \
+
+      cd /workdir && \
+      find . -name "*.sh" -exec sed -i 's/\r//' {} + && \
+      pip install -r requirements.txt && \
+      bash llm_ft/scripts/run_script.sh
