@@ -10,56 +10,57 @@ job:
   # blow past the gRPC 5MB message limit when bundled via `src: ./`.
   input:
   # repo root: pip install reads /workdir/requirements.txt
+  # NOTE: for `type: files`, dst is the *directory* src is copied into.
   - type: files
     src: ./requirements.txt
-    dst: /workdir/requirements.txt
-  # llm_ft code directories
+    dst: /workdir
+  # llm_ft code directories (dst = parent dir; each src dir lands as dst/<name>)
   - type: files
     src: ./llm_ft/configs
-    dst: /workdir/llm_ft/configs
+    dst: /workdir/llm_ft
   - type: files
     src: ./llm_ft/models
-    dst: /workdir/llm_ft/models
+    dst: /workdir/llm_ft
   - type: files
     src: ./llm_ft/tasks
-    dst: /workdir/llm_ft/tasks
+    dst: /workdir/llm_ft
   - type: files
     src: ./llm_ft/optimizers
-    dst: /workdir/llm_ft/optimizers
+    dst: /workdir/llm_ft
   - type: files
     src: ./llm_ft/gradient_pruning
-    dst: /workdir/llm_ft/gradient_pruning
+    dst: /workdir/llm_ft
   - type: files
     src: ./llm_ft/scripts
-    dst: /workdir/llm_ft/scripts
-  # llm_ft loose source files
+    dst: /workdir/llm_ft
+  # llm_ft loose source files (dst = parent dir they are copied into)
   - type: files
     src: ./llm_ft/run.py
-    dst: /workdir/llm_ft/run.py
+    dst: /workdir/llm_ft
   - type: files
     src: ./llm_ft/trainer.py
-    dst: /workdir/llm_ft/trainer.py
+    dst: /workdir/llm_ft
   - type: files
     src: ./llm_ft/training_utils.py
-    dst: /workdir/llm_ft/training_utils.py
+    dst: /workdir/llm_ft
   - type: files
     src: ./llm_ft/utils.py
-    dst: /workdir/llm_ft/utils.py
+    dst: /workdir/llm_ft
   - type: files
     src: ./llm_ft/k_utils.py
-    dst: /workdir/llm_ft/k_utils.py
+    dst: /workdir/llm_ft
   - type: files
     src: ./llm_ft/metrics.py
-    dst: /workdir/llm_ft/metrics.py
+    dst: /workdir/llm_ft
   - type: files
     src: ./llm_ft/lora.py
-    dst: /workdir/llm_ft/lora.py
+    dst: /workdir/llm_ft
   - type: files
     src: ./llm_ft/templates.py
-    dst: /workdir/llm_ft/templates.py
+    dst: /workdir/llm_ft
   - type: files
     src: ./llm_ft/requirements.txt
-    dst: /workdir/llm_ft/requirements.txt
+    dst: /workdir/llm_ft
   args:
     - bash
     - -c
