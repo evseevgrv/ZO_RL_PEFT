@@ -65,11 +65,32 @@ job:
     - bash
     - -c
     - |
+      set -x
       apt-get update && \
       apt-get install -y --no-install-recommends git build-essential && \
-      rm -rf /var/lib/apt/lists/* && \
+      rm -rf /var/lib/apt/lists/*
 
-      cd /workdir && \
+      echo "===== DIAG: pwd ====="; pwd
+      echo "===== DIAG: ls -la / ====="; ls -la /
+      echo "===== DIAG: ls -la /workdir ====="; ls -la /workdir 2>&1
+      echo "===== DIAG: find /workdir (maxdepth 4) ====="; find /workdir -maxdepth 4 2>&1 | sort
+      echo "===== DIAG: requirements.txt anywhere under / (maxdepth 5) ====="; find / -maxdepth 5 -name requirements.txt 2>/dev/null
+      echo "===== DIAG: run.py anywhere under / (maxdepth 5) ====="; find / -maxdepth 5 -name run.py 2>/dev/null
+      echo "===== END DIAG ====="
+
+      # Self-locate uploaded code (dst semantics of mlc `type: files` unclear)
+      REQ="$(find /workdir -name requirements.txt 2>/dev/null | head -1)"
+      RUNPY="$(find /workdir -name run.py 2>/dev/null | head -1)"
+      echo "RESOLVED REQ=$REQ"
+      echo "RESOLVED RUNPY=$RUNPY"
+
+      if [ -z "$REQ" ] || [ -z "$RUNPY" ]; then
+        echo "FATAL: code not found under /workdir — see DIAG above for actual layout"
+        exit 1
+      fi
+
+      RUNDIR="$(dirname "$RUNPY")"
+      pip install -r "$REQ" && \
+      cd "$RUNDIR" && \
       find . -name "*.sh" -exec sed -i 's/\r//' {} + && \
-      pip install -r requirements.txt && \
-      bash llm_ft/scripts/run_script.sh
+      bash scripts/run_script.sh
