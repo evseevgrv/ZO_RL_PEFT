@@ -562,7 +562,7 @@ class OurTrainer(Trainer):
         elif args.trainer == "jaguar_signsgd":
             self.optimizer = Jaguar_SignSGD(params, lr=args.learning_rate, eps=args.zo_eps, beta=args.zo_beta, perturbation_mode=args.perturbation_mode, tensor_sampling_type=args.tensor_sampling_type, matrix_sampling_type=args.matrix_sampling_type, k=effective_k)
         elif args.trainer == "zo_muon":
-            self.optimizer = ZO_MUON(params, lr=args.learning_rate, eps=args.zo_eps, perturbation_mode=args.perturbation_mode, tensor_sampling_type=args.tensor_sampling_type, matrix_sampling_type=args.matrix_sampling_type)
+            self.optimizer = ZO_MUON(params, lr=args.learning_rate, eps=args.zo_eps, momentum=args.momentum, perturbation_mode=args.perturbation_mode, tensor_sampling_type=args.tensor_sampling_type, matrix_sampling_type=args.matrix_sampling_type)
         elif args.trainer == "zo_sampling_muon":
             self.optimizer = ZO_SamplingMUON(params, lr=args.learning_rate, eps=args.zo_eps, perturbation_mode=args.perturbation_mode, tensor_sampling_type=args.tensor_sampling_type, matrix_sampling_type=args.matrix_sampling_type)
         elif args.trainer == "jaguar_muon":

@@ -10,14 +10,16 @@ class ZO_MUON(ZeroOrderOptimizer):
             params: Union[Iterable[torch.Tensor], Iterable[Dict[str, Any]]], 
             lr: Optional[float] = None,
             eps: Optional[float] = None,
+            momentum: float = 0.9,
             tensor_sampling_type: str = "standard_normal",
-            matrix_sampling_type: str = None, 
+            matrix_sampling_type: str = None,
             perturbation_mode: str = "two_side"
         ):
         super().__init__(
             params,
             lr=lr,
             eps=eps,
+            momentum=momentum,
             tensor_sampling_type=tensor_sampling_type,
             matrix_sampling_type=matrix_sampling_type,
             perturbation_mode=perturbation_mode,
@@ -54,21 +56,30 @@ class ZO_MUON(ZeroOrderOptimizer):
         for group_idx, group in enumerate(self.param_groups):
             lr = group['lr']
             eps = group['eps']
-            tensor_sampling_type = group['tensor_sampling_type']
+            momentum = group['momentum']
             for p in group['params']:
                 device = p.device
                 state = self.state[p]
                 tensor_sampling_type = state["tensor_sampling_type"]
 
                 z = self.tensor_sampler.sample(p.shape, generator=self.generator, sampler_type=tensor_sampling_type).to(device)
-                self.generator.manual_seed(self.zo_random_seed)
 
-                grad_update = projected_grad * z / eps 
+                # MeZO single-sample gradient estimate along z.
+                grad_est = projected_grad * z / eps
+
+                # Accumulate into a momentum buffer so that, in expectation, the
+                # buffer aligns with the true gradient. Orthogonalizing the buffer
+                # (not the one-shot estimate) is what makes the Muon step meaningful:
+                # NS(projected_grad * z) would discard all per-coordinate structure.
+                if "momentum_buffer" not in state:
+                    state["momentum_buffer"] = torch.zeros_like(p)
+                buf = state["momentum_buffer"]
+                buf.mul_(momentum).add_(grad_est)
 
                 if p.ndim >= 2:
-                    grad_final = zeropower_via_newtonschulz5(grad_update, steps=5)
+                    grad_final = zeropower_via_newtonschulz5(buf, steps=5)
                 else:
-                    grad_final = torch.sign(grad_update)
+                    grad_final = torch.sign(buf)
 
-                p.data.add_(grad_final.to(device), alpha=-lr) 
+                p.data.add_(grad_final.to(device), alpha=-lr)
         return loss1
