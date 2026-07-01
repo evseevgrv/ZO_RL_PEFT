@@ -77,9 +77,14 @@ class ZO_AdaMM(ZeroOrderOptimizer):
             self.generator.manual_seed(seed)
             for group in self.param_groups:
                 eps = group['eps']
+                # float() keeps the coefficient device-agnostic (same fix as zo_sgd):
+                # projected_grad is a scalar on the loss's output device, while
+                # z/grad_sums live on each param's own device; a sharded model would
+                # otherwise mix cuda:0/cuda:1 here.
+                coeff = float(projected_grad) / (eps * self.k)
                 for p in group['params']:
                     z = self._sample_direction(p)
-                    grad_sums[p].add_(z * (projected_grad / (eps * self.k)))
+                    grad_sums[p].add_(z, alpha=coeff)
 
         for group in self.param_groups:
             beta1, beta2 = group['betas']
