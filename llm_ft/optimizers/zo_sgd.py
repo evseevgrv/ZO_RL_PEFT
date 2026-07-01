@@ -79,9 +79,14 @@ class ZO_SGD(ZeroOrderOptimizer):
             self.generator.manual_seed(seed)
             for group in self.param_groups:
                 eps = group['eps']
+                # float() keeps the coefficient device-agnostic: with a model
+                # sharded across GPUs, projected_grad (a scalar on the loss's
+                # output device) would otherwise mismatch z/grad_sums, which live
+                # on each param's own device.
+                coeff = float(projected_grad) / (eps * self.k)
                 for param in group['params']:
                     z = self._sample_direction(param)
-                    grad_sums[param].add_(z * (projected_grad / (eps * self.k)))
+                    grad_sums[param].add_(z, alpha=coeff)
 
         for group in self.param_groups:
             lr = group['lr']
