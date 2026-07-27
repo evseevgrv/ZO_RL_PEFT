@@ -43,6 +43,9 @@ class ZO_AdaMM(ZeroOrderOptimizer):
         if closure is None:
             raise ValueError("ZO_AdaMM requires a closure")
 
+        if self.k == 1:
+            return self._step_single_probe(closure)
+
         loss_plus_values = []
         projected_grads = []
         probe_seeds = []
@@ -108,6 +111,64 @@ class ZO_AdaMM(ZeroOrderOptimizer):
                 p.data.addcdiv_(state['exp_avg'], state['max_exp_avg_sq'].sqrt().add_(1e-10), value=(-lr))
 
         return torch.stack(loss_plus_values).mean()
+
+    @torch.no_grad()
+    def _step_single_probe(self, closure):
+        """Plain two-point ZO step, used when k == 1.
+
+        With a single probe there is nothing to accumulate or average, so the
+        estimate is applied in one streaming pass over the parameters: z is
+        regenerated from the probe seed and turned into the update in place.
+        This avoids the grad_sums buffer of the k > 1 path, which costs a full
+        param-sized copy of the trainable parameters.
+        """
+        seed = np.random.randint(1_000_000_000)
+        self.zo_random_seed = seed
+
+        self.generator.manual_seed(seed)
+        self._mu_pertrub(scaling_factor=1)
+        loss_plus = closure()
+
+        self.generator.manual_seed(seed)
+        self._mu_pertrub(scaling_factor=-2)
+        loss_minus = closure()
+
+        self.generator.manual_seed(seed)
+        self._mu_pertrub(scaling_factor=1)
+
+        self.projected_grad = (loss_plus - loss_minus) / 2
+
+        self.generator.manual_seed(seed)
+        for group in self.param_groups:
+            beta1, beta2 = group['betas']
+            eps = group['eps']
+            lr = group['lr']
+            weight_decay = group['weight_decay']
+            # float() keeps the coefficient device-agnostic, same reason as in
+            # the k > 1 path: projected_grad is a scalar on the loss's output
+            # device, while z lives on each param's own device.
+            coeff = float(self.projected_grad) / eps
+            for p in group['params']:
+                state = self.state[p]
+                state['step'] += 1
+
+                # z is freshly sampled here, so it can be scaled in place and
+                # reused as the gradient estimate.
+                grad = self._sample_direction(p).mul_(coeff)
+                if weight_decay is not None and weight_decay != 0:
+                    grad.add_(p.data, alpha=weight_decay)
+
+                # Do the AdaMM updates
+                state['exp_avg'].mul_(beta1).add_(grad, alpha=(1.0 - beta1))
+                state['exp_avg_sq'].mul_(beta2).addcmul_(grad, grad, value=(1.0 - beta2))
+                torch.maximum(state['max_exp_avg_sq'], state['exp_avg_sq'],
+                              out=state['max_exp_avg_sq'])
+
+                # Use max_exp_avg_sq for normalization as per Algorithm 1
+                # Add small epsilon for numerical stability (separate from perturbation eps)
+                p.data.addcdiv_(state['exp_avg'], state['max_exp_avg_sq'].sqrt().add_(1e-10), value=(-lr))
+
+        return loss_plus
 
     def _sample_direction(self, param):
         tensor_sampling_type = self.state[param]['tensor_sampling_type']
