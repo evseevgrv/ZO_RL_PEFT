@@ -1,0 +1,4 @@
+zo_sgd 1 5e-4 0 60000 0 best roberta-large lora SST2 A_sgd_k1eq_s0
+zo_rl_sgd 5 5e-4 0 20000 1 best roberta-large lora SST2 A_sgd_greedy_s1
+zo_adamm 1 3e-3 0 60000 1 best roberta-large lora SST2 A_adamm_k1eq_s1
+zo_rl_adamm 5 3e-3 1e-3 20000 2 best roberta-large lora SST2 A_adamm_ldsd_s2
