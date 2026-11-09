@@ -101,6 +101,7 @@ class ZO_RL_Jaguar(ZeroOrderOptimizer):
 
         # Step 1: Try k random seeds on the same sparse parameter subset.
         e_values = {}
+        e_refs = {}
 
         for idx in range(self.k):
             self.zo_random_seed = np.random.randint(1_000_000_000)
@@ -114,6 +115,7 @@ class ZO_RL_Jaguar(ZeroOrderOptimizer):
             
             loss = closure()
             e_values[self.zo_random_seed] = self._loss_to_float(loss)
+            e_refs[self.zo_random_seed] = loss
             
             # Reset state
             self.generator.manual_seed(self.zo_random_seed)
@@ -127,17 +129,13 @@ class ZO_RL_Jaguar(ZeroOrderOptimizer):
         self.zo_random_seed = optimal_seed
         
         # Step 3: Use optimal seed for two-sided finite difference
+        # f(x + eps * z) of the selected candidate is already known: reuse it,
+        # so one step costs K + 1 forward passes instead of K + 2.
+        loss1 = e_refs[self.zo_random_seed]
+
         self.generator.manual_seed(self.zo_random_seed)
         self._sparse_mu_perturb(
-            scaling_factor=1.0,
-            selected_param_ids=selected_param_ids,
-        )
-        
-        loss1 = closure()
-        
-        self.generator.manual_seed(self.zo_random_seed)
-        self._sparse_mu_perturb(
-            scaling_factor=-2.0,
+            scaling_factor=-1.0,
             selected_param_ids=selected_param_ids,
         )
         

@@ -68,6 +68,7 @@ class ZO_RL_AdaMM(ZeroOrderOptimizer):
 
         loss1, loss2 = None, None 
         loss_values = {}
+        loss_refs = {}
 
         if not self.evaluate_memory:
             for group in self.param_groups:
@@ -82,6 +83,7 @@ class ZO_RL_AdaMM(ZeroOrderOptimizer):
             self._mu_pertrub(scaling_factor=1)
             loss = closure()
             loss_values[self.zo_random_seed] = self._loss_to_float(loss)
+            loss_refs[self.zo_random_seed] = loss
             self.generator.manual_seed(self.zo_random_seed)
             self._mu_pertrub(scaling_factor=-1)
         
@@ -90,12 +92,12 @@ class ZO_RL_AdaMM(ZeroOrderOptimizer):
         
         # self.zo_random_seed = np.random.randint(1_000_000_000)
 
-        self.generator.manual_seed(self.zo_random_seed)
-        self._mu_pertrub(scaling_factor=1)
-        loss1 = closure()
+        # f(x + eps * z) of the selected candidate is already known: reuse it,
+        # so one step costs K + 1 forward passes instead of K + 2.
+        loss1 = loss_refs[self.zo_random_seed]
 
         self.generator.manual_seed(self.zo_random_seed)
-        self._mu_pertrub(scaling_factor=-2)
+        self._mu_pertrub(scaling_factor=-1)
         loss2 = closure()
         
         self.projected_grad = (self._loss_to_float(loss1) - self._loss_to_float(loss2)) / 2.0

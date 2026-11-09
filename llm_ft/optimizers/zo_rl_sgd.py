@@ -68,6 +68,7 @@ class ZO_RL_SGD(ZeroOrderOptimizer):
         loss1, loss2 = None, None 
         candidate_seeds = []
         candidate_losses = []
+        candidate_loss_refs = []
         for _ in range(self.k):
             self.zo_random_seed = np.random.randint(1_000_000_000)
             candidate_seeds.append(self.zo_random_seed)
@@ -75,6 +76,7 @@ class ZO_RL_SGD(ZeroOrderOptimizer):
             self._mu_pertrub(scaling_factor=1)
             if closure is not None:
                 loss = closure()
+                candidate_loss_refs.append(loss)
                 candidate_losses.append(self._loss_to_float(loss))
             self.generator.manual_seed(self.zo_random_seed)
             self._mu_pertrub(scaling_factor=-1)
@@ -88,14 +90,14 @@ class ZO_RL_SGD(ZeroOrderOptimizer):
         selected_loss_plus_values = []
         selected_loss_refs = []
 
-        for seed in selected_seeds:
-            self.generator.manual_seed(seed)
-            self._mu_pertrub(scaling_factor=1)
-            loss1 = closure()
-            loss1_value = self._loss_to_float(loss1)
+        for idx, seed in zip(selected_indices, selected_seeds):
+            # f(x + eps * z) is already known from the candidate pass: reuse it,
+            # so one step costs K + 1 forward passes instead of K + 2.
+            loss1 = candidate_loss_refs[idx]
+            loss1_value = candidate_losses[idx]
 
             self.generator.manual_seed(seed)
-            self._mu_pertrub(scaling_factor=-2)
+            self._mu_pertrub(scaling_factor=-1)
             loss2 = closure()
             loss2_value = self._loss_to_float(loss2)
 
@@ -154,22 +156,27 @@ class ZO_RL_SGD(ZeroOrderOptimizer):
                 else:
                     update = grad    
                 param.data.add_(update, alpha=-lr)
+        del grad_sums  # free the x-update buffer before allocating mu_diffs
         mu_norm_diff = None
         mu_grad_norm = None
-        self.generator.manual_seed(self.zo_random_seed)
+        # Regenerate each candidate's z from its own seed, walking the
+        # parameters in the same order as _mu_pertrub, so that coeff[i] is
+        # paired with the direction on which f_i was measured.
+        mu_diffs = {}
         for group in self.param_groups:
-            eps = group['eps']
-            lr = group['lr']
-            for p in group['params']:    
+            for p in group['params']:
+                mu_diffs[p] = torch.zeros_like(self.state[p]['mu'])
+        for i, seed in enumerate(seeds):
+            self.generator.manual_seed(seed)
+            for group in self.param_groups:
+                for p in group['params']:
+                    mu = self.state[p]['mu']
+                    z = torch.normal(mean=mu, std=self.variance, generator=self.generator).to(p.device)
+                    mu_diffs[p].add_(mu - z, alpha=float(coeff[i]))
+        for group in self.param_groups:
+            for p in group['params']:
                 state = self.state[p]
-                mu = state['mu']
-                device = p.device
-                mu_diff = torch.zeros_like(mu).to(device)
-                for i, seed in enumerate(seeds):
-                    # Use the same z that was used during perturbation (saved in state['z'][seed])
-                    z = torch.normal(mean=mu, std=self.variance, generator=self.generator).to(device)
-                    mu_diff += (mu - z) * coeff[i]
-                    
+                mu_diff = mu_diffs[p]
                 g_mu = -mu_diff / (self.k * (self.variance ** 2))
                 state['mu'].add_(g_mu, alpha=-self.lr_mu)
                 if mu_norm_diff is None:
