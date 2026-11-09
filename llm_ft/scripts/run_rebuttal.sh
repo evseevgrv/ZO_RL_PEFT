@@ -20,6 +20,9 @@ export WANDB_TAGS="${WANDB_TAGS:-rebuttal}"   # e.g. commit-68bb19d,blockA
 
 LORA_FLAG=""
 [ "$MODE" = "lora" ] && LORA_FLAG="--lora"
+# Generation tasks (F1) train on the answer tokens, not as option classification.
+CLS_FLAG="--train_as_classification"
+case "$TASK" in SQuAD|DROP) CLS_FLAG="" ;; esac
 
 OUT="$HOME/zorl_runs/$NAME"
 mkdir -p "$OUT"
@@ -44,7 +47,7 @@ python run.py \
     --num_eval=1000 \
     --num_train=1000 \
     --num_dev=500 \
-    --train_as_classification \
+    $CLS_FLAG \
     --seed="$SEED" \
     --train_set_seed="$SEED" \
     --perturbation_mode="two_side" \

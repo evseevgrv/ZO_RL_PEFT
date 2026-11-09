@@ -1,0 +1,5 @@
+zo_rl_sgd 5 1e-6 1e-3 200 0 best facebook/opt-1.3b lora WinoGrande probe_WinoGrande
+zo_rl_sgd 5 1e-6 1e-3 200 0 best facebook/opt-1.3b lora RTE probe_RTE
+zo_rl_sgd 5 1e-6 1e-3 200 0 best facebook/opt-1.3b lora BoolQ probe_BoolQ
+zo_rl_sgd 5 1e-6 1e-3 200 0 best facebook/opt-1.3b lora MultiRC probe_MultiRC
+zo_rl_sgd 5 1e-6 1e-3 200 0 best facebook/opt-1.3b lora SQuAD probe_SQuAD
