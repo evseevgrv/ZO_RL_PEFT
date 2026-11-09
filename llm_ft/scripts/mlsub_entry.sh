@@ -12,7 +12,13 @@ pip install -q transformers==4.28.1 tokenizers==0.13.3 accelerate==0.25.0 datase
 python -c "import torch, transformers; print(torch.__version__, transformers.__version__, transformers.__file__)"
 nvidia-smi -L
 NAME="${@: -1}"
-bash scripts/run_rebuttal.sh "$@"
-status=$?
+# Anonymous Hugging Face downloads hit 429 when many jobs start at once: retry with a random pause.
+for attempt in 1 2 3 4 5 6; do
+  bash scripts/run_rebuttal.sh "$@"
+  status=$?
+  grep -q "429 Client Error" "$HOME/zorl_runs/$NAME/train.log" 2>/dev/null || break
+  echo "HF rate limit, attempt $attempt; retrying"
+  sleep $(( 60 + RANDOM % 240 ))
+done
 tail -n 40 "$HOME/zorl_runs/$NAME/train.log" | tr '\r' '\n' | tail -n 40
 exit $status
