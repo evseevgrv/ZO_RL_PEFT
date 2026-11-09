@@ -1,0 +1,4 @@
+zo_rl_sgd 5 4e-8 1e-3 30 0 best facebook/opt-1.3b ft SST2 smokeM_sgd_optft
+zo_rl_jaguar 5 2e-6 1e-3 30 0 best facebook/opt-1.3b ft SST2 smokeM_jag_optft
+zo_rl_sgd 5 1e-6 1e-3 30 0 best facebook/opt-1.3b lora SQuAD smokeM_sgd_squad
+zo_rl_adamm 5 6e-5 1e-3 30 0 best facebook/opt-1.3b lora MultiRC smokeM_adamm_multirc

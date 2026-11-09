@@ -1,0 +1,6 @@
+zo_rl_jaguar 5 2e-6 1e-3 40 0 best facebook/opt-1.3b ft SST2 smoke_jag_optft
+sparse_jaguar_signsgd 1 2e-6 0 40 0 best facebook/opt-1.3b ft SST2 smoke_sjag_optft
+zo_adamm 1 6e-5 0 40 0 best facebook/opt-1.3b lora MultiRC smoke_adamm_multirc
+zo_rl_sgd 5 1e-6 1e-3 40 0 best facebook/opt-1.3b lora SQuAD smoke_sgd_squad
+zo_rl_sgd 5 1e-6 1e-3 40 0 best facebook/opt-1.3b lora WinoGrande smoke_sgd_wino
+zo_rl_adamm 5 3e-5 1e-3 40 0 best roberta-large ft SST2 smoke_adamm_robft

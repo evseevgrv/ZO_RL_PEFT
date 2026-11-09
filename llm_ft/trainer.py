@@ -588,8 +588,6 @@ class OurTrainer(Trainer):
                 lr_mu=args.lr_mu, 
                 use_grad_first=args.use_grad_first,
                 evaluate_memory=args.evaluate_memory,
-                candidate_selection_strategy=args.zo_rl_sgd_candidate_selection_strategy,
-                candidate_average_count=args.zo_rl_sgd_candidate_average_count,
             )
             if args.use_grad_first:
                 self.model.zero_grad(set_to_none=True)

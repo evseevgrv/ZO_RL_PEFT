@@ -1,0 +1,6 @@
+zo_rl_sgd 5 4e-8 0 20000 0 best roberta-large ft SST2 B_SST2_rob_ft_sgd_greedy_s0
+zo_rl_jaguar 5 3e-4 1e-3 20000 0 best roberta-large lora SST2 B_SST2_rob_lora_jag_ldsd_s0
+zo_sgd 1 4e-8 0 60000 1 best roberta-large ft SST2 B_SST2_rob_ft_sgd_k1eq_s1
+zo_rl_jaguar 5 3e-4 0 20000 1 best roberta-large lora SST2 B_SST2_rob_lora_jag_greedy_s1
+zo_rl_adamm 5 6e-5 1e-3 20000 2 best facebook/opt-1.3b lora SST2 B_SST2_opt_lora_adamm_ldsd_s2
+sparse_jaguar_signsgd 1 3e-4 0 60000 2 best roberta-large lora SST2 B_SST2_rob_lora_jag_k1eq_s2

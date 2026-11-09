@@ -1,0 +1,5 @@
+zo_rl_jaguar 5 1e-5 1e-3 20000 0 best facebook/opt-1.3b lora SST2 B_SST2_opt_lora_jag_ldsd_s0
+zo_adamm 1 6e-5 0 60000 0 best facebook/opt-1.3b lora WinoGrande C_WinoGrande_opt_lora_adamm_k1eq_s0
+zo_rl_jaguar 5 1e-5 0 20000 1 best facebook/opt-1.3b lora SST2 B_SST2_opt_lora_jag_greedy_s1
+zo_rl_sgd 5 1e-6 1e-3 20000 2 best facebook/opt-1.3b lora SST2 B_SST2_opt_lora_sgd_ldsd_s2
+sparse_jaguar_signsgd 1 1e-5 0 60000 2 best facebook/opt-1.3b lora SST2 B_SST2_opt_lora_jag_k1eq_s2

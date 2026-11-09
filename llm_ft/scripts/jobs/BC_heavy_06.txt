@@ -1,0 +1,5 @@
+zo_rl_jaguar 5 2e-6 1e-3 20000 0 best facebook/opt-1.3b ft SST2 B_SST2_opt_ft_jag_ldsd_s0
+zo_rl_adamm 5 6e-5 1e-3 20000 0 best facebook/opt-1.3b lora SQuAD C_SQuAD_opt_lora_adamm_ldsd_s0
+zo_rl_sgd 5 1e-6 1e-3 20000 1 best facebook/opt-1.3b lora MultiRC C_MultiRC_opt_lora_sgd_ldsd_s1
+zo_rl_sgd 5 4e-8 1e-3 20000 2 best facebook/opt-1.3b ft SST2 B_SST2_opt_ft_sgd_ldsd_s2
+zo_rl_adamm 5 6e-5 1e-3 20000 2 best facebook/opt-1.3b lora MultiRC C_MultiRC_opt_lora_adamm_ldsd_s2
