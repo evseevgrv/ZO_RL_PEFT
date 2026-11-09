@@ -25,7 +25,7 @@ CLS_FLAG="--train_as_classification"
 case "$TASK" in SQuAD|DROP) CLS_FLAG="" ;; esac
 
 # Evaluate 20 times per run whatever its length, so K=1 runs with 3x steps do not pay 3x eval time.
-EVAL_STEPS=$(( STEPS / 20 ))
+EVAL_STEPS=$(( STEPS / 20 > 500 ? STEPS / 20 : 500 ))
 OUT="$HOME/zorl_runs/$NAME"
 mkdir -p "$OUT"
 
