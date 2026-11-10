@@ -74,6 +74,7 @@ mkdir -p "$OUT"
     --lr_mu="$LR_MU" \
     --k_value="$K" \
     --variance="${ZORL_VARIANCE:-1}" \
+    ${ZORL_VARIANCE_FINAL:+--variance_final="$ZORL_VARIANCE_FINAL"} \
     --use_grad_first=False \
     --zo_rl_sgd_candidate_selection_strategy="$SELECTION" \
     --beta1=0.9 \

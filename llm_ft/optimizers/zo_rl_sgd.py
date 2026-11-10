@@ -1,4 +1,5 @@
 from .base import ZeroOrderOptimizer
+import math
 import torch
 import numpy as np
 from typing import Optional, Dict, Any, Union, Iterable
@@ -23,6 +24,8 @@ class ZO_RL_SGD(ZeroOrderOptimizer):
             use_grad_first: bool = False,
             candidate_selection_strategy: str = "best",
             candidate_average_count: int = 3,
+            variance_final: Optional[float] = None,
+            variance_total_steps: int = 0,
     ):
         super().__init__(
             params,
@@ -36,6 +39,12 @@ class ZO_RL_SGD(ZeroOrderOptimizer):
         )
         self.k = k
         self.variance = variance
+        # Optional cosine schedule of the sampling std from `variance` to `variance_final`;
+        # the x-step is rescaled by (variance / variance_t)^2 so that its size does not shrink with it.
+        self.variance0 = variance
+        self.variance_final = variance_final
+        self.variance_total_steps = variance_total_steps
+        self._variance_step = 0
         self.lr_mu = lr_mu if lr_mu is not None else lr
         self.use_grad_first = use_grad_first
         self.candidate_selection_strategy = candidate_selection_strategy
@@ -65,6 +74,10 @@ class ZO_RL_SGD(ZeroOrderOptimizer):
         
     @torch.no_grad()
     def step(self, closure=None):
+        if self.variance_final is not None and self.variance_total_steps > 0:
+            t = min(self._variance_step / self.variance_total_steps, 1.0)
+            self.variance = self.variance_final + 0.5 * (self.variance0 - self.variance_final) * (1 + math.cos(math.pi * t))
+            self._variance_step += 1
         loss1, loss2 = None, None 
         candidate_seeds = []
         candidate_losses = []
@@ -145,7 +158,7 @@ class ZO_RL_SGD(ZeroOrderOptimizer):
             for param in group['params']:
                 state = self.state[param]
                 state['step'] += 1
-                grad = grad_sums[param]
+                grad = grad_sums[param].mul_((self.variance0 / self.variance) ** 2)
                 if momentum is not None and momentum != 0:
                     if 'momentum_buffer' not in state:
                         buf = state['momentum_buffer'] = torch.clone(grad).detach()

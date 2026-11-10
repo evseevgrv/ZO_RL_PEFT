@@ -305,6 +305,7 @@ class OurArguments(TrainingArguments):
 
     k_value: int = None
     variance: float = 1e-3
+    variance_final: float = None  # zo_rl_sgd: cosine schedule of the sampling std down to this value
     lr_mu: float = None 
     use_grad_first: bool = False
     evaluate_memory: bool = False
