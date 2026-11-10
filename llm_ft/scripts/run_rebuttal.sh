@@ -73,7 +73,7 @@ mkdir -p "$OUT"
     --params_ratio=0.1 \
     --lr_mu="$LR_MU" \
     --k_value="$K" \
-    --variance=1 \
+    --variance="${ZORL_VARIANCE:-1}" \
     --use_grad_first=False \
     --zo_rl_sgd_candidate_selection_strategy="$SELECTION" \
     --beta1=0.9 \
