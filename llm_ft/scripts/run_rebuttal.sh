@@ -26,6 +26,9 @@ case "$TASK" in SQuAD|DROP) CLS_FLAG="" ;; esac
 
 # Evaluate 20 times per run whatever its length, so K=1 runs with 3x steps do not pay 3x eval time.
 EVAL_STEPS=$(( STEPS / 20 > 500 ? STEPS / 20 : 500 ))
+# transformers >= 4.41 renamed evaluation_strategy to eval_strategy (Qwen3 needs >= 4.51).
+EVAL_FLAG="--evaluation_strategy"
+python -c "import transformers, sys; from packaging import version; sys.exit(version.parse(transformers.__version__) < version.parse('4.41'))" && EVAL_FLAG="--eval_strategy"
 OUT="$HOME/zorl_runs/$NAME"
 mkdir -p "$OUT"
 
@@ -41,7 +44,7 @@ python run.py \
     --logging_steps=10 \
     --num_train_epochs=5 \
     --per_device_train_batch_size=16 \
-    --evaluation_strategy="steps" \
+    $EVAL_FLAG="steps" \
     --eval_steps="$EVAL_STEPS" \
     --save_strategy="no" \
     --max_steps="$STEPS" \

@@ -1,0 +1,12 @@
+zo_sgd 1 3e-5 0 2000 0 best Qwen/Qwen3-1.7B-Base lora RTE Q_RTE_lr3e-5_k1_s0
+zo_sgd 1 1e-4 0 2000 0 best Qwen/Qwen3-1.7B-Base lora RTE Q_RTE_lr1e-4_k1_s0
+zo_sgd 1 3e-4 0 2000 0 best Qwen/Qwen3-1.7B-Base lora RTE Q_RTE_lr3e-4_k1_s0
+zo_sgd 1 1e-3 0 2000 0 best Qwen/Qwen3-1.7B-Base lora RTE Q_RTE_lr1e-3_k1_s0
+zo_sgd 1 3e-5 0 2000 0 best Qwen/Qwen3-1.7B-Base lora WIC Q_WIC_lr3e-5_k1_s0
+zo_sgd 1 1e-4 0 2000 0 best Qwen/Qwen3-1.7B-Base lora WIC Q_WIC_lr1e-4_k1_s0
+zo_sgd 1 3e-4 0 2000 0 best Qwen/Qwen3-1.7B-Base lora WIC Q_WIC_lr3e-4_k1_s0
+zo_sgd 1 1e-3 0 2000 0 best Qwen/Qwen3-1.7B-Base lora WIC Q_WIC_lr1e-3_k1_s0
+zo_sgd 1 3e-5 0 2000 0 best Qwen/Qwen3-1.7B-Base lora BoolQ Q_BoolQ_lr3e-5_k1_s0
+zo_sgd 1 1e-4 0 2000 0 best Qwen/Qwen3-1.7B-Base lora BoolQ Q_BoolQ_lr1e-4_k1_s0
+zo_sgd 1 3e-4 0 2000 0 best Qwen/Qwen3-1.7B-Base lora BoolQ Q_BoolQ_lr3e-4_k1_s0
+zo_sgd 1 1e-3 0 2000 0 best Qwen/Qwen3-1.7B-Base lora BoolQ Q_BoolQ_lr1e-3_k1_s0

@@ -143,8 +143,12 @@ def log_to_file(metrics_dict, step=None, prefix=""):
             plot_path = os.path.join(_file_log_dir, f"{metric_name}.png")
             _create_plot(metric_name, _metrics_history[metric_name], plot_path)
 
-AutoConfig.register("mistral", MistralConfig)
-AutoModelForCausalLM.register(MistralConfig, MistralForCausalLM)
+# transformers < 4.34 has no Mistral; newer versions ship it and refuse a second registration.
+try:
+    AutoConfig.register("mistral", MistralConfig)
+    AutoModelForCausalLM.register(MistralConfig, MistralForCausalLM)
+except ValueError:
+    pass
 
 
 @dataclass
@@ -426,6 +430,10 @@ class Framework:
         if ("llama" in self.args.model_name) or ("mistral" in self.args.model_name.lower()):
             # LLaMA padding token
             tokenizer.pad_token_id = 0  # technically <unk>
+
+        # Qwen configs leave pad_token_id unset; the loss masks padding by config.pad_token_id.
+        if model.config.pad_token_id is None and tokenizer.pad_token_id is not None:
+            model.config.pad_token_id = tokenizer.pad_token_id
 
         # Prefix tuning/LoRA
         if self.args.prefix_tuning:

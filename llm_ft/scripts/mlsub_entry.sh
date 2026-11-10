@@ -6,9 +6,16 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 # The image ships a newer transformers; a venv on top of the system torch keeps ours first.
 python -m venv --system-site-packages /tmp/zv && source /tmp/zv/bin/activate
-pip install -q transformers==4.28.1 tokenizers==0.13.3 accelerate==0.25.0 datasets==2.16.0 \
-    huggingface-hub==0.20.1 wandb==0.16.1 numpy==1.26.4 scikit-learn==1.3.2 protobuf==4.25.1 \
-    sentencepiece safetensors==0.4.1 pyarrow==14.0.2 fsspec==2023.10.0 "setuptools<70"
+# ZORL_TF=new: transformers 4.51 stack for Qwen3 (checked against 4.28 on RoBERTa SST-2, same eval numbers).
+if [ "${ZORL_TF:-old}" = "new" ]; then
+  pip install -q transformers==4.51.3 accelerate==1.2.1 datasets==2.16.0 \
+      wandb==0.16.1 numpy==1.26.4 scikit-learn==1.3.2 protobuf==4.25.1 \
+      sentencepiece pyarrow==14.0.2 fsspec==2023.10.0 "setuptools<70"
+else
+  pip install -q transformers==4.28.1 tokenizers==0.13.3 accelerate==0.25.0 datasets==2.16.0 \
+      huggingface-hub==0.20.1 wandb==0.16.1 numpy==1.26.4 scikit-learn==1.3.2 protobuf==4.25.1 \
+      sentencepiece safetensors==0.4.1 pyarrow==14.0.2 fsspec==2023.10.0 "setuptools<70"
+fi
 python -c "import torch, transformers; print(torch.__version__, transformers.__version__, transformers.__file__)"
 nvidia-smi -L
 NAME="${@: -1}"

@@ -122,7 +122,7 @@ class LoRA:
             attention_name = "attn"
         elif model.config.model_type == "roberta":
             attention_name = "attention"
-        elif model.config.model_type in ["llama", "mistral"]:
+        elif model.config.model_type in ["llama", "mistral", "qwen2", "qwen3"]:
             attention_name = "self_attn"
         else:
             raise NotImplementedError
@@ -195,6 +195,20 @@ class LoRA:
                         attn.v_proj.half()
                     attn.q_proj.weight.data = original_q_weight
                     attn.v_proj.weight.data = original_v_weight
+                elif model.config.model_type in ["qwen2", "qwen3"]:
+                    # Grouped-query attention and an explicit head_dim: take the shapes from the weights.
+                    original_q, original_v = attn.q_proj, attn.v_proj
+                    new_projections = []
+                    for original in (original_q, original_v):
+                        layer = LoRALinear(
+                            original.in_features, original.out_features,
+                            r=r, lora_alpha=alpha, bias=original.bias is not None,
+                        ).to(device=original.weight.device, dtype=original.weight.dtype)
+                        layer.weight.data = original.weight.data
+                        if original.bias is not None:
+                            layer.bias.data = original.bias.data
+                        new_projections.append(layer)
+                    attn.q_proj, attn.v_proj = new_projections
                 elif model.config.model_type == 'roberta':
                     original_q_weight = attn.self.query.weight.data
                     original_q_bias = attn.self.query.bias.data
