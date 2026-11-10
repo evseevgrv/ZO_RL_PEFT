@@ -210,13 +210,14 @@ class LoRA:
                         new_projections.append(layer)
                     attn.q_proj, attn.v_proj = new_projections
                 elif model.config.model_type == 'roberta':
+                    # rank r with alpha/r kept at its r=8 value (alpha 0.1), so r=8 is unchanged
                     original_q_weight = attn.self.query.weight.data
                     original_q_bias = attn.self.query.bias.data
                     original_v_weight = attn.self.value.weight.data
                     original_v_bias = attn.self.value.bias.data
-                    attn.self.query = LoRALinear(model.config.hidden_size, model.config.hidden_size, r=8, lora_alpha=0.1,
+                    attn.self.query = LoRALinear(model.config.hidden_size, model.config.hidden_size, r=r, lora_alpha=0.1 * r / 8,
                                              bias=True).to(original_q_weight.device)
-                    attn.self.value = LoRALinear(model.config.hidden_size, model.config.hidden_size, r=8, lora_alpha=0.1,
+                    attn.self.value = LoRALinear(model.config.hidden_size, model.config.hidden_size, r=r, lora_alpha=0.1 * r / 8,
                                              bias=True).to(original_v_weight.device)
                     if float16:
                         attn.self.query.half()
