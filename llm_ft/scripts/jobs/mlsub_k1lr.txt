@@ -1,0 +1,6 @@
+zo_sgd 1 1e-4 0 60000 0 best roberta-large lora SST2 AM_sgdlr1e-4_k1eq_s0
+zo_sgd 1 1e-4 0 60000 1 best roberta-large lora SST2 AM_sgdlr1e-4_k1eq_s1
+zo_sgd 1 1e-4 0 60000 2 best roberta-large lora SST2 AM_sgdlr1e-4_k1eq_s2
+zo_sgd 1 2e-4 0 60000 0 best roberta-large lora SST2 AM_sgdlr2e-4_k1eq_s0
+zo_sgd 1 2e-4 0 60000 1 best roberta-large lora SST2 AM_sgdlr2e-4_k1eq_s1
+zo_sgd 1 2e-4 0 60000 2 best roberta-large lora SST2 AM_sgdlr2e-4_k1eq_s2
