@@ -30,7 +30,19 @@ def _fallback_hf_cache_dir():
     return str(Path(tempfile.gettempdir()) / "zo_rl_peft_hf_datasets_cache")
 
 
+def _load_offline(data_dir, args):
+    """Read a dataset exported as <data_dir>/<name>[_<config>]/<split>.jsonl (clusters without internet)."""
+    folder = Path(data_dir) / "_".join(args)
+    files = {p.stem: str(p) for p in sorted(folder.glob("*.jsonl"))}
+    if not files:
+        raise FileNotFoundError(f"no offline export for {args} in {folder}")
+    return hf_load_dataset("json", data_files=files)
+
+
 def load_dataset(*args, **kwargs):
+    data_dir = os.environ.get("ZORL_DATA_DIR")
+    if data_dir:
+        return _load_offline(data_dir, args)
     try:
         return hf_load_dataset(*args, **kwargs)
     except (TypeError, ValueError) as exc:

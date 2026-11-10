@@ -28,11 +28,11 @@ case "$TASK" in SQuAD|DROP) CLS_FLAG="" ;; esac
 EVAL_STEPS=$(( STEPS / 20 > 500 ? STEPS / 20 : 500 ))
 # transformers >= 4.41 renamed evaluation_strategy to eval_strategy (Qwen3 needs >= 4.51).
 EVAL_FLAG="--evaluation_strategy"
-python -c "import transformers, sys; from packaging import version; sys.exit(version.parse(transformers.__version__) < version.parse('4.41'))" && EVAL_FLAG="--eval_strategy"
-OUT="$HOME/zorl_runs/$NAME"
+"${PY:-python}" -c "import transformers, sys; from packaging import version; sys.exit(version.parse(transformers.__version__) < version.parse('4.41'))" && EVAL_FLAG="--eval_strategy"
+OUT="${ZORL_OUT:-$HOME/zorl_runs/$NAME}"   # GigaLearn sets ZORL_OUT inside the run folder
 mkdir -p "$OUT"
 
-python run.py \
+"${PY:-python}" run.py \
     --model_name="$MODEL" $LORA_FLAG \
     --task_name="$TASK" \
     --trainer="$TRAINER" \
