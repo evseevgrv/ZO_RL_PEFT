@@ -19,7 +19,7 @@ export PYTHONHASHSEED="$SEED"
 export WANDB_TAGS="${WANDB_TAGS:-rebuttal}"   # e.g. commit-68bb19d,blockA
 
 LORA_FLAG=""
-[ "$MODE" = "lora" ] && LORA_FLAG="--lora"
+[ "$MODE" = "lora" ] && LORA_FLAG="--lora --lora_r=${ZORL_LORA_R:-8}"   # rank 8 as in the paper unless overridden
 # Generation tasks (F1) train on the answer tokens, not as option classification.
 CLS_FLAG="--train_as_classification"
 case "$TASK" in SQuAD|DROP) CLS_FLAG="" ;; esac
