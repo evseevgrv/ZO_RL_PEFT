@@ -26,6 +26,7 @@ class ZO_RL_SGD(ZeroOrderOptimizer):
             candidate_average_count: int = 3,
             variance_final: Optional[float] = None,
             variance_total_steps: int = 0,
+            mu_init_scale: float = 0.0,
     ):
         super().__init__(
             params,
@@ -68,6 +69,20 @@ class ZO_RL_SGD(ZeroOrderOptimizer):
                 #     memory_format=torch.preserve_format
                 # )
                 # state['mu'] /= torch.linalg.norm(state['mu'])
+                if self.use_grad_first:
+                    if param.grad is None:
+                        raise ValueError("param.grad is None, but use_grad_first is True")
+                    # mu^0 along the descent direction -grad f(x^0) (the REINFORCE update moves mu towards it)
+                    state['mu'] = -param.grad.detach().clone()
+        if self.use_grad_first and mu_init_scale > 0:
+            # Rescale mu^0 so that its global norm is mu_init_scale * variance (in units of the sampling std).
+            mu_norm = torch.sqrt(sum(torch.sum(self.state[p]['mu'].float() ** 2) for g in self.param_groups for p in g['params']))
+            for group in self.param_groups:
+                for param in group['params']:
+                    self.state[param]['mu'].mul_(mu_init_scale * variance / mu_norm.clamp_min(1e-30))
+        for group in self.param_groups:
+            for param in group['params']:
+                state = self.state[param]
                 state['mu_old'] = state['mu'].detach().clone()
                 state['mu_old_norm'] = torch.norm(state['mu_old']).item()**2
 

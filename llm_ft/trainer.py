@@ -656,6 +656,7 @@ class OurTrainer(Trainer):
                 candidate_average_count=args.zo_rl_sgd_candidate_average_count,
                 variance_final=args.variance_final,
                 variance_total_steps=args.max_steps,
+                mu_init_scale=args.mu_init_scale,
                 # evaluate_memory=args.evaluate_memory
             )
             if args.use_grad_first:

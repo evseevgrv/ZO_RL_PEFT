@@ -308,6 +308,7 @@ class OurArguments(TrainingArguments):
     variance_final: float = None  # zo_rl_sgd: cosine schedule of the sampling std down to this value
     lr_mu: float = None 
     use_grad_first: bool = False
+    mu_init_scale: float = 0.0  # zo_rl_sgd + use_grad_first: ||mu^0|| = mu_init_scale * variance
     evaluate_memory: bool = False
     zo_rl_sgd_candidate_selection_strategy: str = "best"
     zo_rl_sgd_candidate_average_count: int = 3
