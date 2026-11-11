@@ -181,6 +181,38 @@ class SST2Dataset(Dataset):
         return {0: SST2Template, 1: SST2TemplateEmpty}[template_version]()
 
 
+class SST5Dataset(Dataset):
+    """SST-5 (SetFit/sst5): five-way sentiment, validation split as the evaluation set."""
+    hf_path = "SetFit/sst5"
+    num_labels = 5
+
+    def __init__(self, subtask=None, **kwargs) -> None:
+        self.load_dataset(subtask, **kwargs)
+
+    def load_dataset(self, path, **kwargs):
+        d = load_dataset(self.hf_path)
+        self.samples = {
+            "train": [self.build_sample(e, i) for i, e in enumerate(d["train"])],
+            "valid": [self.build_sample(e, i) for i, e in enumerate(d["validation"])],
+        }
+
+    def build_sample(self, example, idx):
+        return Sample(id=idx, data=example, correct_candidate=int(example["label"]),
+                      candidates=list(range(self.num_labels)))
+
+    def get_template(self, template_version=0):
+        return SST5Template()
+
+
+class RTDataset(SST5Dataset):
+    """Rotten Tomatoes movie reviews (Pang and Lee, 2005): binary sentiment."""
+    hf_path = "rotten_tomatoes"
+    num_labels = 2
+
+    def get_template(self, template_version=0):
+        return RTTemplate()
+
+
 class CopaDataset(Dataset):
     train_sep = "\n\n"
     mixed_set = False

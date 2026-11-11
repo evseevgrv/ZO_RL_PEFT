@@ -59,6 +59,29 @@ class SST2TemplateEmpty(Template):
         return f" {self.verbalizer[candidate]}"
 
 
+class SST5Template(Template):
+    """SST-5 and Rotten Tomatoes: the SST-2 prompt on the `text` field; SST-5 verbalizer as in MeZO."""
+    verbalizer = {0: "terrible", 1: "bad", 2: "okay", 3: "good", 4: "great"}
+
+    def encode(self, sample):
+        text = sample.data["text"].strip()
+        return f"{text} It was"
+
+    def verbalize(self, sample, candidate):
+        text = sample.data["text"].strip()
+        return f"{text} It was {self.verbalizer[candidate]}"
+
+    def encode_sfc(self, sample):
+        return f" It was"
+
+    def verbalize_sfc(self, sample, candidate):
+        return f" It was {self.verbalizer[candidate]}"
+
+
+class RTTemplate(SST5Template):
+    verbalizer = {0: "terrible", 1: "great"}
+
+
 class CopaTemplate(Template):
     capitalization: str = "correct"
     effect_conj: str = " so "
