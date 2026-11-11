@@ -25,6 +25,9 @@ LORA_FLAG=""
 # Generation tasks (F1) train on the answer tokens, not as option classification.
 CLS_FLAG="--train_as_classification"
 case "$TASK" in SQuAD|DROP) CLS_FLAG="" ;; esac
+# Small train sets (CB ~250, COPA 400): dev of 100 as in MeZO, otherwise the 500-example dev leaves no training data.
+NUM_DEV=500
+case "$TASK" in CB|COPA) NUM_DEV=100 ;; esac
 
 # Evaluate 20 times per run whatever its length, so K=1 runs with 3x steps do not pay 3x eval time.
 EVAL_STEPS=$(( STEPS / 20 > 500 ? STEPS / 20 : 500 ))
@@ -53,7 +56,7 @@ mkdir -p "$OUT"
     --num_training_steps="$STEPS" \
     --num_eval=1000 \
     --num_train=1000 \
-    --num_dev=500 \
+    --num_dev="$NUM_DEV" \
     $CLS_FLAG \
     --seed="$SEED" \
     --train_set_seed="$SEED" \
