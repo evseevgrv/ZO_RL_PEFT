@@ -161,7 +161,7 @@ class PromptTuning:
                 embedding_module_device_refer = model.embeddings.word_embeddings.weight
             else:
                 raise ValueError(f"Cannot find embedding module in {model.__class__.__name__}")
-        elif model.config.model_type in ["llama", "mistral"]:
+        elif model.config.model_type in ["llama", "mistral", "qwen2", "qwen3"]:
             embedding_module = model.get_input_embeddings()
             embedding_module_device_refer = embedding_module.weight
         else:

@@ -7,7 +7,7 @@
 #   K          candidates per step (zo_rl_*: K + 1 forwards; zo_sgd/zo_adamm with K=1: 2 forwards)
 #   LR_MU      0 turns zo_rl_* into greedy Gaussian sampling (mu stays at 0)
 #   SELECTION  best | random   (zo_rl_sgd only; ignored elsewhere)
-#   MODE       ft | lora
+#   MODE       ft | lora | prompt
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -20,6 +20,8 @@ export WANDB_TAGS="${WANDB_TAGS:-rebuttal}"   # e.g. commit-68bb19d,blockA
 
 LORA_FLAG=""
 [ "$MODE" = "lora" ] && LORA_FLAG="--lora --lora_r=${ZORL_LORA_R:-8}"   # rank 8 as in the paper unless overridden
+# Prompt tuning: d = num_virtual_tokens * hidden (~2e4), where the learned mean has a usable signal-to-noise.
+[ "$MODE" = "prompt" ] && LORA_FLAG="--prompt_tuning --num_virtual_tokens=${ZORL_NVT:-10} --prompt_init_by_real_tokens=True"
 # Generation tasks (F1) train on the answer tokens, not as option classification.
 CLS_FLAG="--train_as_classification"
 case "$TASK" in SQuAD|DROP) CLS_FLAG="" ;; esac
