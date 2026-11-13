@@ -185,6 +185,7 @@ class SST5Dataset(Dataset):
     """SST-5 (SetFit/sst5): five-way sentiment, validation split as the evaluation set."""
     hf_path = "SetFit/sst5"
     num_labels = 5
+    eval_split = "validation"
 
     def __init__(self, subtask=None, **kwargs) -> None:
         self.load_dataset(subtask, **kwargs)
@@ -193,7 +194,7 @@ class SST5Dataset(Dataset):
         d = load_dataset(self.hf_path)
         self.samples = {
             "train": [self.build_sample(e, i) for i, e in enumerate(d["train"])],
-            "valid": [self.build_sample(e, i) for i, e in enumerate(d["validation"])],
+            "valid": [self.build_sample(e, i) for i, e in enumerate(d[self.eval_split])],
         }
 
     def build_sample(self, example, idx):
@@ -211,6 +212,12 @@ class RTDataset(SST5Dataset):
 
     def get_template(self, template_version=0):
         return RTTemplate()
+
+
+class CRDataset(RTDataset):
+    """Customer Reviews (Hu and Liu, 2004; SetFit/CR): binary sentiment, test split as the evaluation set."""
+    hf_path = "SetFit/CR"
+    eval_split = "test"
 
 
 class CopaDataset(Dataset):
